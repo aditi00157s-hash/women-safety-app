@@ -1,0 +1,8 @@
+{
+  "name": "Safely - Women's Safety & Circle",
+  "description": "Empowering women's personal safety with live location sharing, emergency SOS, fake call simulator, siren alarms, and trusted circle alerts.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
