@@ -7,7 +7,6 @@ import {
   MapPin,
   Users,
   Volume2,
-  VolumeX,
   AlertTriangle,
   Radio,
   Share2,
@@ -19,17 +18,20 @@ import {
   Trash2,
   Heart,
   Navigation,
-  Eye,
   EyeOff,
   BatteryCharging,
   Zap,
-  Info,
   ExternalLink,
   MessageCircle,
   Siren,
   Bell,
   ChevronRight,
   Calculator as CalcIcon,
+  Train,
+  VolumeX,
+  Volume1,
+  Settings,
+  Sparkles,
 } from 'lucide-react';
 import { FakeCallModal, FakeCallPreset } from './components/FakeCallModal.tsx';
 import {
@@ -60,152 +62,177 @@ interface EmergencyContact {
   isPrimary: boolean;
 }
 
-const DEFAULT_PRESETS: FakeCallPreset[] = [
+// Indian context presets for realistic escape calls
+const INDIAN_PRESETS: FakeCallPreset[] = [
   {
-    id: 'dad',
-    callerName: 'Dad ❤️',
+    id: 'papa',
+    callerName: 'Papa ❤️',
     relationship: 'Family',
-    callerNumber: '+1 (555) 234-5678',
+    callerNumber: '+91 98101 23456',
     avatarBg: 'bg-blue-600',
     dialogue:
-      "Hey sweetheart! I just parked right outside in the car with the engine running. I see the building entrance. Are you walking out right now? Let me step out to meet you.",
+      "Beta, main main gate ke samne car mein khada hoon, white Dzire hai hazard lights on hai. Jaldi bahar aao, main chal kar tumhari taraf aa raha hoon.",
   },
   {
     id: 'police',
-    callerName: 'Officer Miller (Local Police)',
-    relationship: 'Emergency Authority',
-    callerNumber: '911-DISPATCH',
+    callerName: 'Inspector Sharma (Police PCR)',
+    relationship: 'Police Control Room',
+    callerNumber: '112-PCR-DELHI',
     avatarBg: 'bg-indigo-700',
     dialogue:
-      "Hello, this is Officer Miller. We received your safety ping in the grid. Our patrol unit is on your street right now. Keep your phone on speaker and stay in the well-lit area.",
+      "Namaste madam, Inspector Sharma from PCR patrol. We received your safety ping. Hamari police PCR van aapke chowk par 1 minute mein pahunch rahi hai. Busy road par hi rahiye.",
   },
   {
-    id: 'brother',
-    callerName: 'Big Brother Leo',
+    id: 'mummy',
+    callerName: 'Mummy 🌸',
     relationship: 'Family',
-    callerNumber: '+1 (555) 789-0123',
-    avatarBg: 'bg-emerald-700',
+    callerNumber: '+91 98712 34567',
+    avatarBg: 'bg-rose-600',
     dialogue:
-      "Hey sis, where are you? I'm walking towards you right now with the dog. Wait for me right there, I'll be there in thirty seconds.",
+      "Beta kahan pahunchi? Raat ho gayi hai. Papa aur bhaiya auto stand tak aa gaye hain tumhe pick karne. Phone ka speaker on rakho, main line par hi hoon.",
   },
   {
-    id: 'friend',
-    callerName: 'Sarah (Bestie) 👯‍♀️',
-    relationship: 'Friend',
-    callerNumber: '+1 (555) 345-6789',
+    id: 'sister',
+    callerName: 'Pooja Di (Sister)',
+    relationship: 'Sister',
+    callerNumber: '+91 99990 12345',
     avatarBg: 'bg-purple-600',
     dialogue:
-      "Hey girl! I'm standing by the bright convenience store corner waving at you! Turn left and come over here right now, everyone's waiting for you!",
+      "Choti kahan hai tu? Main Metro Station Gate No. 2 ke cafe ke bahar khadi hoon! Haath hila rahi hoon dekh, jaldi aaja sab log wait kar rahe hain.",
+  },
+  {
+    id: 'bhaiya',
+    callerName: 'Bhaiya (Elder Brother)',
+    relationship: 'Family',
+    callerNumber: '+91 98112 78901',
+    avatarBg: 'bg-emerald-700',
+    dialogue:
+      "Arre sunn, main bike leke bus stop ke paas hi khada hoon. Do minute mein pahunch raha hoon, kisi se baat mat karna bas seedhe aaja.",
   },
   {
     id: 'cab',
-    callerName: 'Ride Driver - Marcus',
-    relationship: 'Driver Service',
-    callerNumber: '+1 (555) 901-2345',
+    callerName: 'Ramesh - Ola Cab',
+    relationship: 'Cab Driver',
+    callerNumber: '+91 97180 54321',
     avatarBg: 'bg-amber-600',
     dialogue:
-      "Hello, this is your driver Marcus in the white sedan. I am double-parked right by your door with the emergency blinkers on. Hop in whenever you're ready.",
+      "Madam namaste, aapki Ola cab white Swift main gate par lagayi hai. Indicator on kiya hai maine, aap aaram se baithiye.",
   },
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'home' | 'circle' | 'fakecall' | 'numbers' | 'walk' | 'audio'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'circle' | 'fakecall' | 'numbers' | 'walk' | 'audio' | 'volume'>('home');
   const [stealthMode, setStealthMode] = useState(false);
 
   // --- LOCATION & SOS STATE ---
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number; accuracy: number; time: string } | null>(null);
   const [locLoading, setLocLoading] = useState(false);
-  const [locError, setLocError] = useState<string | null>(null);
   const [sosActive, setSosActive] = useState(false);
   const [sosCountdown, setSosCountdown] = useState<number | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [sirenPlaying, setSirenPlaying] = useState(false);
   const [strobeActive, setStrobeActive] = useState(false);
 
+  // --- VOLUME DECREASE 3X TRIGGER FEATURE ---
+  const [volumeShortcutEnabled, setVolumeShortcutEnabled] = useState(true);
+  const [volumeTapCount, setVolumeTapCount] = useState(0);
+  const [volumeAction, setVolumeAction] = useState<'both' | 'fake_call' | 'call_me_sms'>('both');
+  const [volumeContactId, setVolumeContactId] = useState('1'); // Papa by default
+  const [volumeTriggerAlert, setVolumeTriggerAlert] = useState<string | null>(null);
+  const tapTimesRef = useRef<number[]>([]);
+
   // --- FAKE CALL STATE ---
   const [isFakeCallOpen, setIsFakeCallOpen] = useState(false);
-  const [selectedPreset, setSelectedPreset] = useState<FakeCallPreset>(DEFAULT_PRESETS[0]);
+  const [selectedPreset, setSelectedPreset] = useState<FakeCallPreset>(INDIAN_PRESETS[0]);
   const [scheduledTimer, setScheduledTimer] = useState<number | null>(null);
   const [customCallerName, setCustomCallerName] = useState('');
   const [customDialogue, setCustomDialogue] = useState('');
 
-  // --- CIRCLE MEMBERS STATE ---
+  // --- CIRCLE MEMBERS ---
   const [circleMembers, setCircleMembers] = useState<CircleMember[]>([
     {
       id: '1',
-      name: 'Maya Patel',
-      relation: 'Sister',
-      phone: '+1 555-0192',
+      name: 'Mummy',
+      relation: 'Parent',
+      phone: '+91 98712 34567',
       status: 'safe',
-      lastSeen: '2 mins ago',
-      battery: 92,
-      locationName: 'Safe at Campus Library',
-      avatarBg: 'bg-pink-600',
+      lastSeen: 'Active now',
+      battery: 94,
+      locationName: 'Home - Civil Lines',
+      avatarBg: 'bg-rose-600',
     },
     {
       id: '2',
-      name: 'Elena Rostova',
-      relation: 'Roommate',
-      phone: '+1 555-0843',
-      status: 'moving',
-      lastSeen: 'Just now',
-      battery: 76,
-      locationName: 'Walking along North Hallway',
-      avatarBg: 'bg-purple-600',
+      name: 'Papa',
+      relation: 'Parent',
+      phone: '+91 98101 23456',
+      status: 'safe',
+      lastSeen: '5 mins ago',
+      battery: 82,
+      locationName: 'Home - Office Road',
+      avatarBg: 'bg-blue-600',
     },
     {
       id: '3',
-      name: 'Mom',
-      relation: 'Parent / Guardian',
-      phone: '+1 555-0321',
-      status: 'safe',
-      lastSeen: '10 mins ago',
-      battery: 88,
-      locationName: 'Home - Maple Residence',
-      avatarBg: 'bg-indigo-600',
+      name: 'Pooja Di',
+      relation: 'Sister',
+      phone: '+91 99990 12345',
+      status: 'moving',
+      lastSeen: 'Just now',
+      battery: 78,
+      locationName: 'Walking from Rajiv Chowk Metro',
+      avatarBg: 'bg-purple-600',
     },
     {
       id: '4',
-      name: 'Campus Safety Escort',
-      relation: 'Security Desk',
-      phone: '+1 555-0911',
+      name: 'Ananya (PG Roommate)',
+      relation: 'Roommate',
+      phone: '+91 98111 87654',
       status: 'safe',
-      lastSeen: 'Live monitor',
+      lastSeen: '12 mins ago',
+      battery: 89,
+      locationName: 'At Girls Hostel / PG',
+      avatarBg: 'bg-emerald-600',
+    },
+    {
+      id: '5',
+      name: 'Hostel / Society Guard',
+      relation: 'Security Desk',
+      phone: '+91 98999 55555',
+      status: 'safe',
+      lastSeen: 'Main Gate Booth',
       battery: 100,
-      locationName: 'Central Gate Station',
-      avatarBg: 'bg-blue-600',
+      locationName: 'Gate No. 1 Watchpost',
+      avatarBg: 'bg-amber-600',
     },
   ]);
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberPhone, setNewMemberPhone] = useState('');
-  const [newMemberRelation, setNewMemberRelation] = useState('Friend');
+  const [newMemberRelation, setNewMemberRelation] = useState('Sister');
 
   // --- EMERGENCY CONTACTS ---
-  const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContact[]>([
-    { id: '1', name: 'Mom (Direct Line)', phone: '+15550321', relation: 'Parent', isPrimary: true },
-    { id: '2', name: 'Sister Maya', phone: '+15550192', relation: 'Sister', isPrimary: false },
-    { id: '3', name: 'Local Police Dispatch', phone: '911', relation: 'Authorities', isPrimary: true },
-    { id: '4', name: 'National Women Helpline', phone: '1091', relation: 'Emergency Support', isPrimary: true },
+  const [emergencyContacts] = useState<EmergencyContact[]>([
+    { id: '1', name: 'Papa ❤️', phone: '+919810123456', relation: 'Father', isPrimary: true },
+    { id: '2', name: 'Mummy 🌸', phone: '+919871234567', relation: 'Mother', isPrimary: true },
+    { id: '3', name: 'Pooja Di', phone: '+919999012345', relation: 'Sister', isPrimary: false },
+    { id: '4', name: 'National Emergency 112', phone: '112', relation: 'Police ERSS', isPrimary: true },
   ]);
-  const [selectedCountry, setSelectedCountry] = useState<'universal' | 'usa' | 'india' | 'uk'>('universal');
 
-  // --- WALK WITH ME JOURNEY COMPANION ---
+  const [selectedState, setSelectedState] = useState<'all_india' | 'delhi' | 'mumbai' | 'up' | 'bengaluru'>('all_india');
+
+  // --- WALK WITH ME (INDIAN JOURNEY WATCH) ---
   const [walkActive, setWalkActive] = useState(false);
-  const [walkDestination, setWalkDestination] = useState('Walking to Metro Station');
+  const [walkDestination, setWalkDestination] = useState('Metro Station to PG / Society Gate');
   const [walkDurationMin, setWalkDurationMin] = useState(15);
   const [walkSecondsLeft, setWalkSecondsLeft] = useState(15 * 60);
 
-  // --- STEALTH CALCULATOR STATE ---
+  // --- STEALTH CALCULATOR ---
   const [calcDisplay, setCalcDisplay] = useState('0');
 
-  // Get real user location
+  // Fetch real geolocation
   const refreshLocation = () => {
-    if (!('geolocation' in navigator)) {
-      setLocError('Geolocation not supported by this browser.');
-      return;
-    }
+    if (!('geolocation' in navigator)) return;
     setLocLoading(true);
-    setLocError(null);
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -217,18 +244,14 @@ export default function App() {
         });
         setLocLoading(false);
       },
-      (err) => {
-        // Fallback default coordinates if denied or unavailable in sandbox
+      () => {
         setUserLocation({
-          lat: 37.7749,
-          lng: -122.4194,
-          accuracy: 15,
+          lat: 28.6139,
+          lng: 77.2090,
+          accuracy: 12,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         });
         setLocLoading(false);
-        if (err.code === 1) {
-          setLocError('Location permission was denied. Using approximate safe demo coords.');
-        }
       },
       { enableHighAccuracy: true, timeout: 8000 }
     );
@@ -237,6 +260,113 @@ export default function App() {
   useEffect(() => {
     refreshLocation();
   }, []);
+
+  const getEmergencyMapsUrl = () => {
+    if (!userLocation) return 'https://maps.google.com';
+    return `https://maps.google.com/?q=${userLocation.lat},${userLocation.lng}`;
+  };
+
+  const getSosMessageText = () => {
+    const coordsStr = userLocation
+      ? `${userLocation.lat.toFixed(5)}, ${userLocation.lng.toFixed(5)}`
+      : 'Current GPS tracking';
+    const mapsLink = getEmergencyMapsUrl();
+    return `🚨 आपातकालीन SOS / EMERGENCY ALERT: Mujhe turant madad chahiye! Meri live location hai: ${mapsLink} (Coordinates: ${coordsStr}, Time: ${new Date().toLocaleTimeString()}). Kripya turant police (112 / 1091) ko inform karein ya mujhe call karein!`;
+  };
+
+  const getCallMeMessageText = () => {
+    const mapsLink = getEmergencyMapsUrl();
+    const contact = emergencyContacts.find((c) => c.id === volumeContactId) || emergencyContacts[0];
+    return `🚨 CALL ME URGENTLY! (कॉल करो तुरंत): Hi ${contact.name}, I am in an uncomfortable / unsafe place and cannot talk right now. Please CALL ME REPEATEDLY immediately so I have an excuse to step away! My live GPS location: ${mapsLink} (Time: ${new Date().toLocaleTimeString()})`;
+  };
+
+  // --- VOLUME DECREASE 3X LOGIC ---
+  const triggerVolumeDecreaseAction = () => {
+    const targetContact = emergencyContacts.find((c) => c.id === volumeContactId) || emergencyContacts[0];
+
+    // Play subtle haptic feedback vibration if supported
+    if ('vibrate' in navigator) {
+      try {
+        navigator.vibrate([200, 100, 200, 100, 400]);
+      } catch {}
+    }
+
+    // Native Web Notification
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification('🚨 Volume 3x Trigger Activated!', {
+          body: `Emergency 'Call Me' Alert dispatched to ${targetContact.name}. Live GPS shared.`,
+          icon: '/favicon.ico',
+        });
+      } catch {}
+    }
+
+    setVolumeTriggerAlert(`Volume 3x Pressed! Triggered rescue action for ${targetContact.name}.`);
+    setTimeout(() => setVolumeTriggerAlert(null), 5000);
+
+    if (volumeAction === 'fake_call' || volumeAction === 'both') {
+      // Ring the phone immediately from Papa
+      setSelectedPreset(INDIAN_PRESETS[0]);
+      setIsFakeCallOpen(true);
+    }
+
+    if (volumeAction === 'call_me_sms' || volumeAction === 'both') {
+      // Open WhatsApp or SMS with pre-filled urgent Call Me message
+      const text = encodeURIComponent(getCallMeMessageText());
+      window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+    }
+  };
+
+  // Register physical Volume Down button presses & keyboard shortcuts ('AudioVolumeDown', 'VolumeDown', or desktop test key 'v'/'V')
+  useEffect(() => {
+    if (!volumeShortcutEnabled) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Listen for volume down or test key
+      if (
+        e.key === 'AudioVolumeDown' ||
+        e.code === 'AudioVolumeDown' ||
+        e.key === 'VolumeDown' ||
+        e.key.toLowerCase() === 'v'
+      ) {
+        const now = Date.now();
+        // Keep taps within last 2.5 seconds
+        tapTimesRef.current = tapTimesRef.current.filter((t) => now - t < 2500);
+        tapTimesRef.current.push(now);
+
+        const currentCount = tapTimesRef.current.length;
+        setVolumeTapCount(currentCount);
+
+        if (currentCount >= 3) {
+          tapTimesRef.current = [];
+          setVolumeTapCount(0);
+          triggerVolumeDecreaseAction();
+        } else {
+          // Reset count visual after 2.5 seconds
+          setTimeout(() => {
+            if (tapTimesRef.current.length === 0) {
+              setVolumeTapCount(0);
+            }
+          }, 2600);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [volumeShortcutEnabled, volumeAction, volumeContactId, userLocation]);
+
+  // Request browser notification permission
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window) {
+      const perm = await Notification.requestPermission();
+      if (perm === 'granted') {
+        new Notification('Safely Suraksha Enabled', {
+          body: 'Volume Decrease 3x will send immediate Call Me alerts to your selected contacts.',
+        });
+      }
+    }
+  };
 
   // SOS Countdown logic
   useEffect(() => {
@@ -283,7 +413,6 @@ export default function App() {
         setWalkSecondsLeft((prev) => prev - 1);
       }, 1000);
     } else if (walkActive && walkSecondsLeft === 0) {
-      // Escalated alert: user has not arrived in time
       startEmergencySiren();
       setSirenPlaying(true);
     }
@@ -317,20 +446,7 @@ export default function App() {
   };
 
   const triggerSos = () => {
-    setSosCountdown(5); // 5 second safety window to cancel false alarms
-  };
-
-  const getEmergencyMapsUrl = () => {
-    if (!userLocation) return 'https://maps.google.com';
-    return `https://maps.google.com/?q=${userLocation.lat},${userLocation.lng}`;
-  };
-
-  const getSosMessageText = () => {
-    const coordsStr = userLocation
-      ? `${userLocation.lat.toFixed(5)}, ${userLocation.lng.toFixed(5)} (±${userLocation.accuracy}m)`
-      : 'Current GPS tracking';
-    const mapsLink = getEmergencyMapsUrl();
-    return `🚨 EMERGENCY SOS! I need help immediately. My live location is: ${mapsLink} Coordinates: ${coordsStr}. Time: ${new Date().toLocaleTimeString()}. Please call me or send help right away!`;
+    setSosCountdown(5);
   };
 
   const copyLiveShare = () => {
@@ -342,6 +458,11 @@ export default function App() {
   const shareViaWhatsApp = () => {
     const text = encodeURIComponent(getSosMessageText());
     window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+  };
+
+  const shareToNcwWhatsApp = () => {
+    const text = encodeURIComponent(getSosMessageText());
+    window.open(`https://api.whatsapp.com/send?phone=917827170170&text=${text}`, '_blank');
   };
 
   const shareViaSms = (phone = '') => {
@@ -360,13 +481,12 @@ export default function App() {
     setSirenPlaying(false);
   };
 
-  // Stealth Calculator Helper
+  // Calculator logic for stealth mode
   const handleCalcBtn = (val: string) => {
     if (val === 'C') {
       setCalcDisplay('0');
     } else if (val === '=') {
       try {
-        // Safe evaluation
         const sanitized = calcDisplay.replace(/[^0-9+\-*/.]/g, '');
         // eslint-disable-next-line no-eval
         const res = Function(`'use strict'; return (${sanitized})`)();
@@ -379,7 +499,6 @@ export default function App() {
     }
   };
 
-  // Stealth Mode view
   if (stealthMode) {
     return (
       <div className="min-h-screen bg-black text-white flex flex-col justify-center items-center p-4 font-mono select-none">
@@ -388,8 +507,8 @@ export default function App() {
             <span>Calculator</span>
             <button
               onClick={() => setStealthMode(false)}
-              className="text-neutral-500 hover:text-rose-400 p-1"
-              title="Double tap to return to Safely"
+              className="text-neutral-500 hover:text-rose-400 p-1 cursor-pointer"
+              title="Exit disguise mode"
             >
               <EyeOff className="w-4 h-4" />
             </button>
@@ -423,14 +542,7 @@ export default function App() {
             {['4', '5', '6', '='].map((val) => (
               <button
                 key={val}
-                onClick={() => {
-                  if (val === '=') {
-                    // Double tap secret trigger or regular calc
-                    handleCalcBtn(val);
-                  } else {
-                    handleCalcBtn(val);
-                  }
-                }}
+                onClick={() => handleCalcBtn(val)}
                 className={`h-12 rounded-xl active:scale-95 transition-transform ${
                   val === '=' ? 'bg-emerald-600 text-white font-bold row-span-2 flex items-center justify-center' : 'bg-neutral-850 text-white hover:bg-neutral-800'
                 }`}
@@ -466,7 +578,7 @@ export default function App() {
               onClick={() => setStealthMode(false)}
               className="text-[11px] text-neutral-600 hover:text-neutral-400 cursor-pointer"
             >
-              Tap here to exit disguise mode
+              Tap here to return to Safely India
             </button>
           </div>
         </div>
@@ -482,44 +594,71 @@ export default function App() {
         className="fixed inset-0 pointer-events-none z-40 bg-red-600/90 mix-blend-screen opacity-0 transition-opacity duration-75"
       />
 
-      {/* SOS Active Urgent Modal Alert */}
+      {/* Floating Alert Notification when Volume 3x is pressed */}
+      {volumeTriggerAlert && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gradient-to-r from-red-600 to-rose-600 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-red-300 text-xs font-bold animate-in fade-in slide-in-from-top-4 duration-200">
+          <Volume1 className="w-5 h-5 animate-pulse" />
+          <span>{volumeTriggerAlert}</span>
+        </div>
+      )}
+
+      {/* Active SOS Modal */}
       {sosActive && (
         <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-200">
           <div className="w-20 h-20 rounded-full bg-red-600 animate-ping absolute opacity-40" />
-          <div className="w-20 h-20 rounded-full bg-red-600 flex items-center justify-center mb-6 relative shadow-2xl shadow-red-600">
+          <div className="w-20 h-20 rounded-full bg-red-600 flex items-center justify-center mb-5 relative shadow-2xl shadow-red-600">
             <Siren className="w-10 h-10 text-white animate-bounce" />
           </div>
 
-          <h2 className="text-3xl font-extrabold text-white tracking-tight">EMERGENCY SOS BROADCASTING</h2>
-          <p className="text-sm text-red-300 mt-2 max-w-md">
-            Emergency audio siren is blaring and your live location ping has been compiled for your circle and emergency dispatch.
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            आपातकालीन SOS सक्रिय / SOS BROADCASTING
+          </h2>
+          <p className="text-xs sm:text-sm text-red-300 mt-1 max-w-md">
+            Emergency Siren is sounding. Live GPS tracking link prepared for India Police (112), Women Helpline (1091), and your family WhatsApp.
           </p>
 
-          <div className="bg-neutral-900 border border-red-800/80 rounded-2xl p-4 my-6 max-w-sm w-full text-left text-xs">
-            <div className="text-neutral-400 font-medium mb-1">Your Live Coordinates:</div>
-            <div className="font-mono text-white text-sm">
-              {userLocation ? `${userLocation.lat.toFixed(5)}, ${userLocation.lng.toFixed(5)}` : 'Detecting...'}
+          <div className="bg-neutral-900 border border-red-800/80 rounded-2xl p-4 my-5 max-w-sm w-full text-left text-xs">
+            <div className="text-neutral-400 font-medium mb-1">Your Exact GPS Location (India):</div>
+            <div className="font-mono text-white text-sm font-bold">
+              {userLocation ? `${userLocation.lat.toFixed(5)}, ${userLocation.lng.toFixed(5)}` : 'Tracking...'}
             </div>
             <div className="text-[11px] text-emerald-400 mt-1 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Accuracy ±{userLocation?.accuracy || 10} meters
+              Accuracy ±{userLocation?.accuracy || 10}m · Google Maps Ready
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs mb-6">
+          <div className="flex flex-col sm:flex-row gap-2.5 w-full max-w-sm mb-5">
             <a
-              href="tel:911"
-              className="flex-1 py-3 px-4 bg-red-600 hover:bg-red-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-red-950"
+              href="tel:112"
+              className="flex-1 py-3 px-4 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-red-950"
             >
               <Phone className="w-4 h-4" />
-              Call 911 / Police
+              Call Police (112)
             </a>
+            <a
+              href="tel:1091"
+              className="flex-1 py-3 px-4 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2"
+            >
+              <Heart className="w-4 h-4" />
+              Women Helpline (1091)
+            </a>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-2.5 w-full max-w-sm mb-6">
             <button
               onClick={shareViaWhatsApp}
-              className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+              className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
             >
               <MessageCircle className="w-4 h-4" />
-              WhatsApp Alert
+              WhatsApp Family Alert
+            </button>
+            <button
+              onClick={shareToNcwWhatsApp}
+              className="flex-1 py-3 px-4 bg-teal-700 hover:bg-teal-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Shield className="w-4 h-4" />
+              NCW WhatsApp SOS
             </button>
           </div>
 
@@ -532,26 +671,26 @@ export default function App() {
         </div>
       )}
 
-      {/* SOS False-Alarm Countdown Modal */}
+      {/* SOS False Alarm 5-second countdown */}
       {sosCountdown !== null && sosCountdown > 0 && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
           <div className="w-32 h-32 rounded-full border-4 border-red-500 flex items-center justify-center mb-6 animate-pulse bg-red-950/40">
             <span className="font-mono text-6xl font-black text-red-500">{sosCountdown}</span>
           </div>
           <h3 className="text-2xl font-bold text-white">Sending SOS in {sosCountdown}s</h3>
-          <p className="text-sm text-neutral-400 mt-1 mb-8 max-w-sm">
-            Audible alarm and circle dispatch will trigger automatically. Tap cancel if this was an accidental press.
+          <p className="text-xs text-neutral-400 mt-1 mb-8 max-w-sm">
+            Audible siren and family dispatch will start. Tap cancel if this was an accidental touch.
           </p>
           <button
             onClick={cancelSos}
-            className="w-full max-w-xs py-3.5 bg-neutral-200 hover:bg-white text-neutral-950 rounded-xl text-sm font-bold cursor-pointer transition-colors shadow-lg"
+            className="w-full max-w-xs py-3.5 bg-neutral-200 hover:bg-white text-neutral-950 rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-lg"
           >
             Cancel False Alarm
           </button>
         </div>
       )}
 
-      {/* Top Application Header */}
+      {/* Top Header */}
       <header className="border-b border-neutral-850 bg-neutral-900/90 backdrop-blur-md sticky top-0 z-30 px-4 sm:px-6 py-3">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -561,26 +700,45 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-base font-bold tracking-tight text-white">Safely</span>
-                <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-1.5 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800/60">
-                  Girls Circle
+                <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-1.5 py-0.5 rounded bg-orange-950/90 text-orange-300 border border-orange-800/60 flex items-center gap-1">
+                  <span>🇮🇳 India · सुरक्षा</span>
                 </span>
               </div>
-              <p className="text-[11px] text-neutral-400">Personal Safety & Live Location Network</p>
+              <p className="text-[11px] text-neutral-400">Emergency 112 / 1091 · Live GPS · Volume 3x Trigger</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Stealth Disguise Button */}
+          <div className="flex items-center gap-2">
+            {/* Volume Shortcut Indicator & Quick Switch */}
             <button
-              onClick={() => setStealthMode(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-800 bg-neutral-950 hover:bg-neutral-800 text-neutral-300 text-xs font-medium transition-colors cursor-pointer"
-              title="Disguise this screen as a regular calculator"
+              onClick={() => setActiveTab('volume')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border cursor-pointer transition-colors ${
+                volumeShortcutEnabled
+                  ? 'bg-rose-950/60 border-rose-800/80 text-rose-300'
+                  : 'bg-neutral-900 border-neutral-800 text-neutral-500'
+              }`}
+              title="Configure Volume Decrease 3x Trigger"
             >
-              <CalcIcon className="w-3.5 h-3.5 text-neutral-400" />
-              <span className="hidden sm:inline">Disguise Mode</span>
+              <Volume1 className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden sm:inline">Volume 3x: {volumeShortcutEnabled ? 'Active' : 'Off'}</span>
+              {volumeTapCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-rose-600 text-white font-mono text-[10px] font-bold">
+                  {volumeTapCount}/3
+                </span>
+              )}
             </button>
 
-            {/* Quick Siren Toggle Button */}
+            {/* Stealth Mode */}
+            <button
+              onClick={() => setStealthMode(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-800 bg-neutral-950 hover:bg-neutral-800 text-neutral-300 text-xs font-medium cursor-pointer"
+              title="Disguise as calculator"
+            >
+              <CalcIcon className="w-3.5 h-3.5 text-neutral-400" />
+              <span className="hidden sm:inline">Disguise</span>
+            </button>
+
+            {/* Siren Toggle */}
             <button
               onClick={() => {
                 if (sirenPlaying) {
@@ -604,14 +762,37 @@ export default function App() {
         </div>
       </header>
 
-      {/* Navigation Tabs */}
+      {/* Volume 3x Active Persistent Bar (shows pocket protection status) */}
+      {volumeShortcutEnabled && (
+        <div className="bg-gradient-to-r from-neutral-900 via-rose-950/40 to-neutral-900 border-b border-rose-900/30 px-4 py-2">
+          <div className="max-w-6xl mx-auto flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+              <span className="text-neutral-300">
+                <strong>Pocket Shortcut Active:</strong> Click your phone's <strong>Volume Down button 3 times rapidly</strong> (or press 'V' key) to send an instant "Call Me!" alert to <strong>{emergencyContacts.find((c) => c.id === volumeContactId)?.name}</strong>.
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={triggerVolumeDecreaseAction}
+                className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-[11px] cursor-pointer"
+              >
+                Test 3x Click Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tabs */}
       <div className="bg-neutral-900 border-b border-neutral-850 px-4">
         <div className="max-w-6xl mx-auto flex items-center gap-1 sm:gap-2 overflow-x-auto py-2 scrollbar-none">
           {[
             { id: 'home', label: 'Safety Radar', icon: MapPin },
-            { id: 'fakecall', label: 'Fake Call Escape', icon: PhoneCall },
-            { id: 'circle', label: 'Girls Circle', icon: Users, badge: circleMembers.length },
-            { id: 'numbers', label: 'Emergency Helplines', icon: Phone },
+            { id: 'volume', label: 'Volume 3x Trigger', icon: Volume1, highlight: true },
+            { id: 'fakecall', label: 'Fake Call (Papa / Police)', icon: PhoneCall },
+            { id: 'circle', label: 'Suraksha Circle', icon: Users, badge: circleMembers.length },
+            { id: 'numbers', label: 'India Helplines (112 / 1091)', icon: Phone },
             { id: 'walk', label: 'Walk With Me', icon: Navigation, activeIndicator: walkActive },
             { id: 'audio', label: 'Deterrent Sounds', icon: Volume2 },
           ].map((tab) => {
@@ -624,10 +805,12 @@ export default function App() {
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   isActive
                     ? 'bg-neutral-800 text-white shadow-sm ring-1 ring-neutral-700/80'
+                    : tab.highlight
+                    ? 'text-rose-300 hover:text-white hover:bg-neutral-850/60'
                     : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-850/60'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-rose-400' : 'text-neutral-500'}`} />
+                <Icon className={`w-4 h-4 ${isActive ? 'text-rose-400' : tab.highlight ? 'text-rose-400' : 'text-neutral-500'}`} />
                 <span>{tab.label}</span>
                 {tab.badge && (
                   <span className="text-[10px] font-mono font-medium px-1.5 py-0.2 rounded-full bg-neutral-750 text-neutral-300">
@@ -643,69 +826,289 @@ export default function App() {
         </div>
       </div>
 
-      {/* Main Content Area */}
+      {/* Main Content */}
       <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
+        {/* TAB: VOLUME 3X TRIGGER CONFIGURATION & DEMO */}
+        {activeTab === 'volume' && (
+          <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full">
+            <div className="border-b border-neutral-850 pb-4">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-rose-400 mb-1">
+                <Volume1 className="w-4 h-4" />
+                <span>Pocket Hardware Shortcut (आवाज़ बटन शॉर्टकट)</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold text-white">
+                Volume Decrease 3x Trigger Settings
+              </h2>
+              <p className="text-xs sm:text-sm text-neutral-400 mt-1">
+                When you're in an uncomfortable conversation, walking in the dark, or in a suspicious auto/cab, click the <strong>Volume Down button 3 times rapidly</strong> through your pocket. Safely will immediately send a "Call Me Urgently!" distress notification and ring your phone.
+              </p>
+            </div>
+
+            {/* Interactive Status & Live Tap Feedback */}
+            <div className="bg-gradient-to-br from-rose-950/50 via-neutral-900 to-neutral-950 border border-rose-900/60 rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
+              <div className="flex flex-col gap-3 text-center md:text-left">
+                <div className="flex items-center justify-center md:justify-start gap-2 text-xs font-bold text-rose-400 uppercase tracking-wider">
+                  <span className={`w-2.5 h-2.5 rounded-full ${volumeShortcutEnabled ? 'bg-emerald-400 animate-ping' : 'bg-neutral-600'}`} />
+                  <span>{volumeShortcutEnabled ? 'Hardware Listener Active' : 'Shortcut Disabled'}</span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-bold text-white">
+                  Press Volume Down 3 Times (or press 'V' key)
+                </h3>
+                <p className="text-xs text-neutral-300 max-w-md">
+                  Keep your phone inside your jeans pocket or bag. Triple-clicking the volume down button triggers your safety action without looking at the screen.
+                </p>
+
+                {/* Notification permission prompt */}
+                {'Notification' in window && Notification.permission !== 'granted' && (
+                  <button
+                    onClick={requestNotificationPermission}
+                    className="self-start inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-750 text-neutral-200 text-xs font-medium border border-neutral-700 cursor-pointer mt-1"
+                  >
+                    <Bell className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Enable Lockscreen System Notifications</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Interactive Virtual Volume Button Simulator */}
+              <div className="flex flex-col items-center gap-3 shrink-0">
+                <button
+                  onClick={() => {
+                    const now = Date.now();
+                    tapTimesRef.current = tapTimesRef.current.filter((t) => now - t < 2500);
+                    tapTimesRef.current.push(now);
+                    const currentCount = tapTimesRef.current.length;
+                    setVolumeTapCount(currentCount);
+
+                    if (currentCount >= 3) {
+                      tapTimesRef.current = [];
+                      setVolumeTapCount(0);
+                      triggerVolumeDecreaseAction();
+                    } else {
+                      setTimeout(() => {
+                        if (tapTimesRef.current.length === 0) setVolumeTapCount(0);
+                      }, 2600);
+                    }
+                  }}
+                  className="w-32 h-32 rounded-2xl bg-neutral-900 border-2 border-rose-500/80 hover:border-rose-400 hover:bg-neutral-850 flex flex-col items-center justify-center gap-1 shadow-2xl active:scale-95 transition-transform cursor-pointer group"
+                >
+                  <Volume1 className="w-8 h-8 text-rose-400 group-hover:scale-110 transition-transform" />
+                  <span className="text-xs font-bold text-white">Volume Down</span>
+                  <span className="text-[10px] text-neutral-400 font-mono">
+                    {volumeTapCount > 0 ? `${volumeTapCount} / 3 clicks` : 'Click 3 times'}
+                  </span>
+                </button>
+                <span className="text-[11px] text-neutral-500">Tap 3x rapidly to test trigger</span>
+              </div>
+            </div>
+
+            {/* Customization Options */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Target Selected Contact */}
+              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 flex flex-col gap-4">
+                <div className="flex items-center gap-2 text-xs font-bold text-neutral-300 uppercase tracking-wider">
+                  <Users className="w-4 h-4 text-rose-400" />
+                  <span>1. Who to send the "Call Me" notification to:</span>
+                </div>
+
+                <div className="flex flex-col gap-2.5">
+                  {emergencyContacts.map((contact) => (
+                    <label
+                      key={contact.id}
+                      className={`flex items-center justify-between p-3.5 rounded-xl border cursor-pointer transition-all ${
+                        volumeContactId === contact.id
+                          ? 'bg-neutral-850 border-rose-500/80 ring-1 ring-rose-500/30'
+                          : 'bg-neutral-950 border-neutral-850 hover:border-neutral-750 text-neutral-400'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="radio"
+                          name="volumeContact"
+                          checked={volumeContactId === contact.id}
+                          onChange={() => setVolumeContactId(contact.id)}
+                          className="accent-rose-500"
+                        />
+                        <div>
+                          <div className="text-xs font-bold text-white">{contact.name}</div>
+                          <div className="text-[11px] text-neutral-500 font-mono">{contact.phone}</div>
+                        </div>
+                      </div>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-neutral-800 text-neutral-400">
+                        {contact.relation}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Selection */}
+              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 flex flex-col gap-4">
+                <div className="flex items-center gap-2 text-xs font-bold text-neutral-300 uppercase tracking-wider">
+                  <Zap className="w-4 h-4 text-rose-400" />
+                  <span>2. What action should trigger on 3x Volume Down:</span>
+                </div>
+
+                <div className="flex flex-col gap-2.5 text-xs">
+                  {[
+                    {
+                      id: 'both',
+                      title: 'Ring My Phone & Send "Call Me" Alert (Recommended)',
+                      desc: 'Rings your phone from Papa/Police so you can answer, AND prepares a pre-filled WhatsApp/SMS to your contact with live GPS.',
+                    },
+                    {
+                      id: 'fake_call',
+                      title: 'Discreet Fake Call Escape Only',
+                      desc: 'Immediately makes your phone ring loudly from Papa or Police with realistic audio so you can walk away.',
+                    },
+                    {
+                      id: 'call_me_sms',
+                      title: 'Silent "Call Me Urgently" Dispatch',
+                      desc: 'Quietly sends: "CALL ME IMMEDIATELY! I am in trouble at [Live GPS Location]" without ringing your phone.',
+                    },
+                  ].map((act) => (
+                    <label
+                      key={act.id}
+                      className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                        volumeAction === act.id
+                          ? 'bg-neutral-850 border-rose-500/80 ring-1 ring-rose-500/30'
+                          : 'bg-neutral-950 border-neutral-850 hover:border-neutral-750 text-neutral-400'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="volumeAction"
+                        checked={volumeAction === act.id}
+                        onChange={() => setVolumeAction(act.id as typeof volumeAction)}
+                        className="accent-rose-500 mt-0.5"
+                      />
+                      <div>
+                        <div className="font-bold text-white mb-0.5">{act.title}</div>
+                        <div className="text-[11px] text-neutral-400 leading-relaxed">{act.desc}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Generated Call Me Message Preview */}
+            <div className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-5 flex flex-col gap-2.5">
+              <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider">
+                Preview of Dispatched Message:
+              </span>
+              <div className="bg-neutral-950 border border-neutral-850 rounded-xl p-3.5 text-xs font-mono text-emerald-300 leading-relaxed">
+                {getCallMeMessageText()}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* TAB 1: SAFETY RADAR & LIVE LOCATION */}
         {activeTab === 'home' && (
           <div className="flex flex-col gap-6">
-            {/* Hero SOS Trigger Banner */}
+            {/* Hero SOS Banner */}
             <div className="bg-gradient-to-br from-red-950/40 via-neutral-900 to-neutral-950 border border-red-900/40 rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl shadow-red-950/20">
               <div className="flex flex-col gap-2 text-center md:text-left">
                 <div className="inline-flex items-center justify-center md:justify-start gap-2 text-xs font-bold text-rose-400 uppercase tracking-wider">
                   <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-                  Instant Distress Trigger
+                  India 24/7 Distress SOS (आपातकालीन बटन)
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                  Are you in immediate danger?
+                  Are you in trouble or feeling unsafe?
                 </h2>
                 <p className="text-xs sm:text-sm text-neutral-400 max-w-lg">
-                  Tap SOS to activate the high-decibel deterrence siren and broadcast your coordinates directly to your circle & emergency contacts.
+                  Tap SOS to sound the loud deterrent siren and send your live Google Maps coordinates via WhatsApp and SMS to family and 112 ERSS police.
                 </p>
+                <div className="text-[11px] text-rose-300 flex items-center gap-1.5 mt-1">
+                  <Volume1 className="w-3.5 h-3.5" />
+                  <span>Pro-tip: Click phone's Volume Down button 3x to trigger automatic rescue call.</span>
+                </div>
               </div>
 
               {/* Big Red SOS Button */}
               <button
                 onClick={triggerSos}
-                className="group relative flex items-center justify-center w-36 h-36 rounded-full bg-gradient-to-b from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 shadow-2xl shadow-red-700/60 active:scale-95 transition-transform cursor-pointer border-4 border-red-400/40"
+                className="group relative flex items-center justify-center w-36 h-36 rounded-full bg-gradient-to-b from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 shadow-2xl shadow-red-700/60 active:scale-95 transition-transform cursor-pointer border-4 border-red-400/40 shrink-0"
               >
                 <div className="absolute inset-0 rounded-full animate-ping bg-red-600 opacity-20 pointer-events-none" />
                 <div className="flex flex-col items-center text-white">
                   <ShieldAlert className="w-10 h-10 mb-1 group-hover:scale-110 transition-transform" />
                   <span className="text-2xl font-black tracking-wider">SOS</span>
-                  <span className="text-[10px] uppercase tracking-widest opacity-80">Hold / Tap</span>
+                  <span className="text-[10px] uppercase tracking-widest opacity-80">आपातकालीन</span>
                 </div>
               </button>
             </div>
 
-            {/* Live Location Card & Sharing Actions */}
+            {/* Quick WhatsApp Dispatch Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button
+                onClick={shareViaWhatsApp}
+                className="bg-emerald-950/60 border border-emerald-800/80 hover:bg-emerald-900/60 p-4 rounded-2xl flex items-center gap-3 transition-colors text-left cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shrink-0">
+                  <MessageCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-white block">WhatsApp Family Alert</span>
+                  <span className="text-[11px] text-emerald-300">Live GPS + Coordinates</span>
+                </div>
+              </button>
+
+              <button
+                onClick={shareToNcwWhatsApp}
+                className="bg-teal-950/60 border border-teal-800/80 hover:bg-teal-900/60 p-4 rounded-2xl flex items-center gap-3 transition-colors text-left cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-teal-600 flex items-center justify-center text-white shrink-0">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-white block">NCW WhatsApp SOS</span>
+                  <span className="text-[11px] text-teal-300">National Commission (7827170170)</span>
+                </div>
+              </button>
+
+              <a
+                href="tel:112"
+                className="bg-red-950/60 border border-red-800/80 hover:bg-red-900/60 p-4 rounded-2xl flex items-center gap-3 transition-colors text-left"
+              >
+                <div className="w-10 h-10 rounded-xl bg-red-600 flex items-center justify-center text-white shrink-0">
+                  <Phone className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-white block">Call 112 (All-India ERSS)</span>
+                  <span className="text-[11px] text-red-300">Police, Ambulance, Fire</span>
+                </div>
+              </a>
+            </div>
+
+            {/* Live Location Card */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left Column: Location Details */}
               <div className="lg:col-span-2 bg-neutral-900/80 border border-neutral-800 rounded-2xl p-5 sm:p-6 flex flex-col justify-between gap-5">
                 <div className="flex items-start justify-between gap-4 border-b border-neutral-850 pb-4">
                   <div>
                     <div className="flex items-center gap-2">
                       <MapPin className="w-5 h-5 text-rose-400" />
-                      <h3 className="text-base font-bold text-white">Your Real-Time Coordinates</h3>
+                      <h3 className="text-base font-bold text-white">Live GPS Location Sharing</h3>
                     </div>
                     <p className="text-xs text-neutral-400 mt-0.5">
-                      Continuously monitored via browser Geolocation.
+                      Coordinates are accurate for streets, metro stations, and autos across India.
                     </p>
                   </div>
                   <button
                     onClick={refreshLocation}
                     disabled={locLoading}
-                    className="text-xs px-3 py-1.5 rounded-lg border border-neutral-800 bg-neutral-950 hover:bg-neutral-850 text-neutral-300 font-medium cursor-pointer transition-colors"
+                    className="text-xs px-3 py-1.5 rounded-lg border border-neutral-800 bg-neutral-950 hover:bg-neutral-850 text-neutral-300 font-medium cursor-pointer"
                   >
                     {locLoading ? 'Updating GPS...' : 'Refresh GPS'}
                   </button>
                 </div>
 
-                {/* Coordinates & Accuracy Box */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="bg-neutral-950 border border-neutral-850 p-3.5 rounded-xl">
                     <span className="text-[11px] text-neutral-500 font-medium uppercase">Latitude & Longitude</span>
                     <div className="font-mono text-sm font-bold text-neutral-100 mt-1">
-                      {userLocation ? `${userLocation.lat.toFixed(5)}, ${userLocation.lng.toFixed(5)}` : 'Searching...'}
+                      {userLocation ? `${userLocation.lat.toFixed(5)}, ${userLocation.lng.toFixed(5)}` : 'Detecting...'}
                     </div>
                   </div>
                   <div className="bg-neutral-950 border border-neutral-850 p-3.5 rounded-xl">
@@ -722,10 +1125,10 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Direct Google Maps View & External Link */}
+                {/* Google Maps link */}
                 <div className="bg-neutral-950 border border-neutral-850 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
                   <div className="text-xs text-neutral-300">
-                    <span className="font-semibold text-white block">Google Maps Safety Link:</span>
+                    <span className="font-semibold text-white block">Google Maps SOS Link:</span>
                     <span className="font-mono text-[11px] text-neutral-500 truncate block max-w-sm">
                       {getEmergencyMapsUrl()}
                     </span>
@@ -735,93 +1138,74 @@ export default function App() {
                       href={getEmergencyMapsUrl()}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-850 hover:bg-neutral-800 text-neutral-200 text-xs font-medium transition-colors border border-neutral-750"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-850 hover:bg-neutral-800 text-neutral-200 text-xs font-medium border border-neutral-750"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
                       Open Maps
                     </a>
                     <button
                       onClick={copyLiveShare}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-850 hover:bg-neutral-800 text-neutral-200 text-xs font-medium transition-colors border border-neutral-750 cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-850 hover:bg-neutral-800 text-neutral-200 text-xs font-medium border border-neutral-750 cursor-pointer"
                     >
                       {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                       <span>{copiedLink ? 'Copied' : 'Copy'}</span>
                     </button>
                   </div>
                 </div>
-
-                {/* Quick Share Buttons */}
-                <div className="flex flex-col sm:flex-row gap-2.5 pt-2 border-t border-neutral-850">
-                  <button
-                    onClick={shareViaWhatsApp}
-                    className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    Share Live Location via WhatsApp
-                  </button>
-                  <button
-                    onClick={() => shareViaSms()}
-                    className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 px-4 bg-neutral-800 hover:bg-neutral-750 text-neutral-100 rounded-xl text-xs font-semibold transition-colors cursor-pointer border border-neutral-700/80"
-                  >
-                    <Share2 className="w-4 h-4 text-neutral-400" />
-                    Broadcast SMS Distress Link
-                  </button>
-                </div>
               </div>
 
-              {/* Right Column: Fast Escape Card & Safety Checklist */}
+              {/* Fast Escape Card */}
               <div className="flex flex-col gap-4">
-                {/* Instant Fake Call Card */}
                 <div className="bg-gradient-to-br from-indigo-950/40 to-neutral-900 border border-indigo-900/50 rounded-2xl p-5 flex flex-col justify-between gap-4">
                   <div className="flex items-center gap-2 text-indigo-400 text-xs font-semibold uppercase tracking-wider">
                     <PhoneCall className="w-4 h-4" />
-                    Awkward / Unsafe Escape
+                    Fake Audio Call (फर्जी कॉल)
                   </div>
                   <div>
-                    <h4 className="text-base font-bold text-white">Trigger Simulated Call</h4>
+                    <h4 className="text-base font-bold text-white">Escape Suspicious Company</h4>
                     <p className="text-xs text-neutral-400 mt-1">
-                      Need an instant realistic excuse to walk away from someone? Your phone will ring with speech audio.
+                      Suspicious person following or cab driver acting weird? Make your phone ring from "Papa" or "Police" with speech audio.
                     </p>
                   </div>
 
                   <div className="flex flex-col gap-2">
                     <button
                       onClick={() => setIsFakeCallOpen(true)}
-                      className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-indigo-950 transition-colors"
+                      className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-indigo-950"
                     >
                       <PhoneCall className="w-4 h-4" />
-                      Ring Phone Right Now
+                      Ring Phone from Papa ❤️
                     </button>
                     <button
                       onClick={() => {
-                        setScheduledTimer(15);
-                        setActiveTab('fakecall');
+                        setSelectedPreset(INDIAN_PRESETS[1]);
+                        setIsFakeCallOpen(true);
                       }}
                       className="w-full py-2 px-3 bg-neutral-950 border border-neutral-800 hover:border-neutral-700 text-neutral-300 rounded-xl text-xs font-medium flex items-center justify-center gap-2 cursor-pointer"
                     >
-                      <Clock className="w-3.5 h-3.5 text-neutral-500" />
-                      Ring in 15 seconds
+                      <Shield className="w-3.5 h-3.5 text-indigo-400" />
+                      Ring from Police Inspector (PCR)
                     </button>
                   </div>
                 </div>
 
-                {/* Quick Deterrent Whistle & Bark */}
+                {/* Deterrent sound buttons */}
                 <div className="bg-neutral-900/80 border border-neutral-800 rounded-2xl p-4 flex flex-col gap-3">
                   <div className="text-xs font-bold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
                     <Volume2 className="w-3.5 h-3.5 text-neutral-400" />
-                    Audio Deterrents
+                    Instant Audio Deterrents
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <button
                       onClick={() => playHighWhistle()}
-                      className="p-2.5 rounded-xl bg-neutral-950 border border-neutral-800 hover:border-neutral-700 text-neutral-200 font-medium flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-transform"
+                      className="p-2.5 rounded-xl bg-neutral-950 border border-neutral-800 hover:border-neutral-700 text-neutral-200 font-medium flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
                     >
                       <Volume2 className="w-3.5 h-3.5 text-amber-400" />
-                      Whistle Blast
+                      Police Whistle
                     </button>
                     <button
                       onClick={() => playGuardDogBark()}
-                      className="p-2.5 rounded-xl bg-neutral-950 border border-neutral-800 hover:border-neutral-700 text-neutral-200 font-medium flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-transform"
+                      className="p-2.5 rounded-xl bg-neutral-950 border border-neutral-800 hover:border-neutral-700 text-neutral-200 font-medium flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
                     >
                       <Volume2 className="w-3.5 h-3.5 text-rose-400" />
                       Guard Dog Bark
@@ -829,27 +1213,6 @@ export default function App() {
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* Quick Circle Overview Banner */}
-            <div className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-rose-950/60 text-rose-400 border border-rose-900/40">
-                  <Users className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-semibold text-white">Girls Circle Active ({circleMembers.length} Members)</h4>
-                  <p className="text-xs text-neutral-400">All members receive notification when you trigger SOS or start a walk.</p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setActiveTab('circle')}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-400 hover:text-rose-300 cursor-pointer"
-              >
-                <span>View Full Circle Radar</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
             </div>
           </div>
         )}
@@ -860,22 +1223,22 @@ export default function App() {
             <div className="border-b border-neutral-850 pb-4">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-indigo-400 mb-1">
                 <PhoneCall className="w-4 h-4" />
-                <span>Discreet Escape Simulator</span>
+                <span>Discreet Escape Simulator (फर्जी कॉल)</span>
               </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-white">Realistic Incoming Fake Call</h2>
+              <h2 className="text-xl sm:text-2xl font-bold text-white">Realistic Incoming Fake Call (India)</h2>
               <p className="text-xs sm:text-sm text-neutral-400 mt-1">
-                Triggers an authentic phone ringing screen with customizable audio voice scripts. Answer the call to hear real dialogue and speak along naturally to escape unsafe situations or unwanted company.
+                Rings your phone with authentic Indian English / Hindi voice scripts. Answer aloud to effortlessly excuse yourself and walk away from uncomfortable or unsafe situations.
               </p>
             </div>
 
-            {/* Active Countdown Notice if Scheduled */}
+            {/* Scheduled timer alert */}
             {scheduledTimer !== null && (
               <div className="bg-indigo-950/70 border border-indigo-800 rounded-xl p-4 flex items-center justify-between gap-4 text-xs">
                 <div className="flex items-center gap-3">
                   <span className="w-3 h-3 rounded-full bg-indigo-500 animate-ping" />
                   <span className="text-indigo-200">
-                    Incoming call from <strong className="text-white">{selectedPreset.callerName}</strong> scheduled in{' '}
-                    <strong className="text-white font-mono text-sm">{scheduledTimer}s</strong>... Pocket your phone!
+                    Incoming call from <strong className="text-white">{selectedPreset.callerName}</strong> in{' '}
+                    <strong className="text-white font-mono text-sm">{scheduledTimer}s</strong>... Put phone on table or pocket!
                   </span>
                 </div>
                 <button
@@ -887,13 +1250,13 @@ export default function App() {
               </div>
             )}
 
-            {/* Select Caller Persona */}
+            {/* Indian Caller Presets */}
             <div className="flex flex-col gap-3">
               <span className="text-xs font-semibold text-neutral-300 uppercase tracking-wider">
-                Select Caller Profile & Voice Script:
+                Select Indian Caller Profile & Dialogue:
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {DEFAULT_PRESETS.map((preset) => {
+                {INDIAN_PRESETS.map((preset) => {
                   const isSelected = selectedPreset.id === preset.id;
                   return (
                     <button
@@ -919,7 +1282,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      <p className="text-[11px] text-neutral-400 line-clamp-3 italic leading-relaxed">
+                      <p className="text-[11px] text-neutral-300 line-clamp-3 italic leading-relaxed">
                         "{preset.dialogue}"
                       </p>
                     </button>
@@ -928,11 +1291,11 @@ export default function App() {
               </div>
             </div>
 
-            {/* Trigger Options Bar */}
+            {/* Call Trigger Buttons */}
             <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div>
-                <span className="text-sm font-bold text-white block">Call Trigger Mechanism</span>
-                <span className="text-xs text-neutral-400">Ring instantly or delay so you can place your phone on the table.</span>
+                <span className="text-sm font-bold text-white block">Trigger Timing</span>
+                <span className="text-xs text-neutral-400">Ring right now or set a delay so you can act surprised.</span>
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
@@ -964,22 +1327,22 @@ export default function App() {
               </div>
             </div>
 
-            {/* Custom Caller Creator */}
+            {/* Custom Caller */}
             <div className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-5 flex flex-col gap-4">
               <span className="text-xs font-bold text-neutral-300 uppercase tracking-wider">
-                Or Customize Your Own Caller & Dialogue:
+                Custom Hindi / Hinglish Voice Dialogue:
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <input
                   type="text"
-                  placeholder="Caller Name (e.g. Inspector Sharma, Uncle David)"
+                  placeholder="Caller Name (e.g. Chachu, RWA Uncle, Hostel Warden)"
                   value={customCallerName}
                   onChange={(e) => setCustomCallerName(e.target.value)}
                   className="bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
                 />
                 <input
                   type="text"
-                  placeholder="Caller Speech Script (Spoken aloud by synthesized voice)"
+                  placeholder="Dialogue script (e.g. Beta main gate par khada hoon, jaldi aao)"
                   value={customDialogue}
                   onChange={(e) => setCustomDialogue(e.target.value)}
                   className="bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
@@ -992,7 +1355,7 @@ export default function App() {
                     id: 'custom-' + Date.now(),
                     callerName: customCallerName,
                     relationship: 'Custom Contact',
-                    callerNumber: '+1 (555) 000-0000',
+                    callerNumber: '+91 98110 00000',
                     avatarBg: 'bg-teal-600',
                     dialogue: customDialogue,
                   };
@@ -1007,46 +1370,47 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3: GIRLS CIRCLE RADAR & MEMBERS */}
+        {/* TAB 3: SURAKSHA CIRCLE */}
         {activeTab === 'circle' && (
           <div className="flex flex-col gap-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-neutral-850 pb-4">
               <div>
                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-rose-400 mb-1">
                   <Users className="w-4 h-4" />
-                  <span>Trusted Circle Network</span>
+                  <span>Suraksha Network (सुरक्षा चक्र)</span>
                 </div>
-                <h2 className="text-xl sm:text-2xl font-bold text-white">Girls Safety Circle</h2>
+                <h2 className="text-xl sm:text-2xl font-bold text-white">Girls Suraksha Circle</h2>
                 <p className="text-xs sm:text-sm text-neutral-400 mt-0.5">
-                  Your trusted circle receives instantaneous alerts if you trigger SOS or if a journey timer lapses.
+                  Your family, sisters, and hostel friends who will receive instantaneous WhatsApp and SMS alerts.
                 </p>
               </div>
 
               <button
-                onClick={() => {
-                  shareViaWhatsApp();
-                }}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold transition-colors cursor-pointer"
+                onClick={shareViaWhatsApp}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer shadow-md shadow-emerald-950"
               >
-                <Share2 className="w-3.5 h-3.5" />
-                Ping All Circle Members
+                <MessageCircle className="w-4 h-4" />
+                Broadcast to Family WhatsApp Group
               </button>
             </div>
 
-            {/* Add New Circle Member Form */}
+            {/* Add Member Form */}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!newMemberName || !newMemberPhone) return;
+                const formattedPhone = newMemberPhone.startsWith('+91')
+                  ? newMemberPhone
+                  : `+91 ${newMemberPhone}`;
                 const newMem: CircleMember = {
                   id: Date.now().toString(),
                   name: newMemberName.trim(),
                   relation: newMemberRelation,
-                  phone: newMemberPhone.trim(),
+                  phone: formattedPhone.trim(),
                   status: 'safe',
                   lastSeen: 'Just added',
                   battery: 100,
-                  locationName: 'Sharing permitted',
+                  locationName: 'Sharing enabled',
                   avatarBg: 'bg-emerald-600',
                 };
                 setCircleMembers([...circleMembers, newMem]);
@@ -1057,14 +1421,14 @@ export default function App() {
             >
               <input
                 type="text"
-                placeholder="Friend / Guardian Name"
+                placeholder="Name (e.g. Choti Behen, Mummy, Ananya)"
                 value={newMemberName}
                 onChange={(e) => setNewMemberName(e.target.value)}
                 className="w-full sm:flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-500"
               />
               <input
                 type="tel"
-                placeholder="Phone Number (+1...)"
+                placeholder="Mobile (+91 98...)"
                 value={newMemberPhone}
                 onChange={(e) => setNewMemberPhone(e.target.value)}
                 className="w-full sm:flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-500"
@@ -1074,11 +1438,11 @@ export default function App() {
                 onChange={(e) => setNewMemberRelation(e.target.value)}
                 className="w-full sm:w-auto bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-300 focus:outline-none focus:border-rose-500"
               >
-                <option value="Sister">Sister</option>
-                <option value="Bestie">Best Friend</option>
-                <option value="Roommate">Roommate</option>
-                <option value="Parent">Parent</option>
-                <option value="Security">Security</option>
+                <option value="Sister">Sister (बहन)</option>
+                <option value="Parent">Parent (माता-पिता)</option>
+                <option value="Roommate">PG Roommate (सहेली)</option>
+                <option value="Brother">Brother (भाई)</option>
+                <option value="Security">Hostel / Society Guard</option>
               </select>
               <button
                 type="submit"
@@ -1089,7 +1453,7 @@ export default function App() {
               </button>
             </form>
 
-            {/* Circle Members Cards */}
+            {/* Circle Member Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {circleMembers.map((member) => (
                 <div
@@ -1117,13 +1481,12 @@ export default function App() {
                     <button
                       onClick={() => setCircleMembers(circleMembers.filter((m) => m.id !== member.id))}
                       className="text-neutral-600 hover:text-red-400 p-1"
-                      title="Remove from Circle"
+                      title="Remove"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
 
-                  {/* Status, Location, and Battery */}
                   <div className="bg-neutral-950 border border-neutral-850 rounded-xl p-3 flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-emerald-400" />
@@ -1135,20 +1498,19 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Quick Action buttons */}
                   <div className="flex items-center gap-2 pt-1 border-t border-neutral-850 text-xs">
                     <a
                       href={`tel:${member.phone}`}
                       className="flex-1 py-1.5 px-3 rounded-lg bg-neutral-800 hover:bg-neutral-750 text-neutral-200 text-center font-medium flex items-center justify-center gap-1.5"
                     >
-                      <Phone className="w-3 h-3 text-emerald-400" />
+                      <Phone className="w-3.5 h-3.5 text-emerald-400" />
                       Call
                     </a>
                     <button
                       onClick={() => shareViaSms(member.phone)}
                       className="flex-1 py-1.5 px-3 rounded-lg bg-neutral-800 hover:bg-neutral-750 text-neutral-200 text-center font-medium flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      <MessageCircle className="w-3 h-3 text-indigo-400" />
+                      <MessageCircle className="w-3.5 h-3.5 text-indigo-400" />
                       Send Live GPS
                     </button>
                   </div>
@@ -1158,55 +1520,48 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 4: EMERGENCY HELPLINES & FAST DIALING */}
+        {/* TAB 4: OFFICIAL INDIA EMERGENCY HELPLINES */}
         {activeTab === 'numbers' && (
           <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-neutral-850 pb-4">
               <div>
                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-rose-400 mb-1">
                   <Phone className="w-4 h-4" />
-                  <span>Instant 1-Tap Dialing</span>
+                  <span>Government of India Official Helplines</span>
                 </div>
-                <h2 className="text-xl sm:text-2xl font-bold text-white">Emergency Helplines & Numbers</h2>
+                <h2 className="text-xl sm:text-2xl font-bold text-white">India Emergency Directory</h2>
                 <p className="text-xs sm:text-sm text-neutral-400 mt-0.5">
-                  Tap any number to initiate direct phone call. Works 24/7 without internet connection.
+                  1-Tap Direct dialing. Works 24/7 without internet or balance on all Indian telecom networks.
                 </p>
               </div>
 
-              {/* Country selector */}
+              {/* State Filter */}
               <div className="flex items-center gap-1 bg-neutral-900 border border-neutral-800 p-1 rounded-xl text-xs">
                 {[
-                  { id: 'universal', label: 'Universal (112)' },
-                  { id: 'india', label: 'India' },
-                  { id: 'usa', label: 'USA / Canada' },
-                  { id: 'uk', label: 'UK' },
-                ].map((c) => (
+                  { id: 'all_india', label: 'All India' },
+                  { id: 'delhi', label: 'Delhi NCR' },
+                  { id: 'mumbai', label: 'Mumbai' },
+                  { id: 'up', label: 'UP (1090 WPL)' },
+                  { id: 'bengaluru', label: 'Bengaluru' },
+                ].map((st) => (
                   <button
-                    key={c.id}
-                    onClick={() => setSelectedCountry(c.id as typeof selectedCountry)}
+                    key={st.id}
+                    onClick={() => setSelectedState(st.id as typeof selectedState)}
                     className={`px-3 py-1 rounded-lg font-medium cursor-pointer transition-colors ${
-                      selectedCountry === c.id ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-neutral-200'
+                      selectedState === st.id ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-neutral-200'
                     }`}
                   >
-                    {c.label}
+                    {st.label}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* National / Regional Official Emergency Numbers */}
+            {/* Helpline Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Police */}
+              {/* 112 */}
               <a
-                href={
-                  selectedCountry === 'india'
-                    ? 'tel:100'
-                    : selectedCountry === 'uk'
-                    ? 'tel:999'
-                    : selectedCountry === 'usa'
-                    ? 'tel:911'
-                    : 'tel:112'
-                }
+                href="tel:112"
                 className="bg-neutral-900 border border-neutral-800 hover:border-red-600/80 rounded-2xl p-5 flex items-center justify-between gap-4 group transition-all"
               >
                 <div className="flex items-center gap-3.5">
@@ -1215,22 +1570,20 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-white group-hover:text-red-400 transition-colors">
-                      Police & Emergency Services
+                      112 (National ERSS Police)
                     </h3>
-                    <p className="text-xs text-neutral-400">Immediate armed/patrol response</p>
+                    <p className="text-xs text-neutral-400">All-in-one Police, Fire & Medical</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="font-mono text-xl font-bold text-red-400">
-                    {selectedCountry === 'india' ? '100 / 112' : selectedCountry === 'uk' ? '999' : '911'}
-                  </span>
-                  <span className="block text-[10px] text-neutral-500 uppercase">Tap to Call</span>
+                  <span className="font-mono text-2xl font-black text-red-400">112</span>
+                  <span className="block text-[10px] text-neutral-500 uppercase">24/7 Free</span>
                 </div>
               </a>
 
-              {/* National Women Safety Line */}
+              {/* 1091 */}
               <a
-                href={selectedCountry === 'india' ? 'tel:1091' : 'tel:18007997233'}
+                href="tel:1091"
                 className="bg-neutral-900 border border-neutral-800 hover:border-rose-500/80 rounded-2xl p-5 flex items-center justify-between gap-4 group transition-all"
               >
                 <div className="flex items-center gap-3.5">
@@ -1239,22 +1592,42 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-white group-hover:text-rose-400 transition-colors">
-                      Women Safety Helpline
+                      Women Helpline (महिला हेल्पलाइन)
                     </h3>
-                    <p className="text-xs text-neutral-400">Trained female operators 24/7</p>
+                    <p className="text-xs text-neutral-400">Dedicated female police officers</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="font-mono text-xl font-bold text-rose-400">
-                    {selectedCountry === 'india' ? '1091' : '1-800-799-SAFE'}
-                  </span>
-                  <span className="block text-[10px] text-neutral-500 uppercase">Tap to Call</span>
+                  <span className="font-mono text-2xl font-black text-rose-400">1091</span>
+                  <span className="block text-[10px] text-neutral-500 uppercase">24/7 Free</span>
                 </div>
               </a>
 
-              {/* Domestic Abuse & Harassment Crisis Line */}
+              {/* 1090 */}
               <a
-                href={selectedCountry === 'india' ? 'tel:181' : 'tel:18007997233'}
+                href="tel:1090"
+                className="bg-neutral-900 border border-neutral-800 hover:border-indigo-500/80 rounded-2xl p-5 flex items-center justify-between gap-4 group transition-all"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-xl bg-indigo-950/80 text-indigo-400 border border-indigo-900/50 flex items-center justify-center font-bold">
+                    <Radio className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white group-hover:text-indigo-400 transition-colors">
+                      Women Power Line (1090 WPL)
+                    </h3>
+                    <p className="text-xs text-neutral-400">Stalking, cyber harassment & calls</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="font-mono text-2xl font-black text-indigo-400">1090</span>
+                  <span className="block text-[10px] text-neutral-500 uppercase">Confidential</span>
+                </div>
+              </a>
+
+              {/* 181 */}
+              <a
+                href="tel:181"
                 className="bg-neutral-900 border border-neutral-800 hover:border-amber-500/80 rounded-2xl p-5 flex items-center justify-between gap-4 group transition-all"
               >
                 <div className="flex items-center gap-3.5">
@@ -1263,22 +1636,42 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-white group-hover:text-amber-400 transition-colors">
-                      Domestic Violence Support
+                      181 (Ministry of WCD)
                     </h3>
-                    <p className="text-xs text-neutral-400">Legal, shelter & psychological aid</p>
+                    <p className="text-xs text-neutral-400">Domestic abuse, shelter & legal aid</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="font-mono text-xl font-bold text-amber-400">
-                    {selectedCountry === 'india' ? '181' : '1-800-799'}
-                  </span>
-                  <span className="block text-[10px] text-neutral-500 uppercase">Tap to Call</span>
+                  <span className="font-mono text-2xl font-black text-amber-400">181</span>
+                  <span className="block text-[10px] text-neutral-500 uppercase">Toll Free</span>
                 </div>
               </a>
 
-              {/* Medical Ambulance */}
+              {/* 139 */}
               <a
-                href={selectedCountry === 'india' ? 'tel:108' : selectedCountry === 'uk' ? 'tel:999' : 'tel:911'}
+                href="tel:139"
+                className="bg-neutral-900 border border-neutral-800 hover:border-cyan-500/80 rounded-2xl p-5 flex items-center justify-between gap-4 group transition-all"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-xl bg-cyan-950/80 text-cyan-400 border border-cyan-900/50 flex items-center justify-center font-bold">
+                    <Train className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white group-hover:text-cyan-400 transition-colors">
+                      139 (Rail Madad & RPF Security)
+                    </h3>
+                    <p className="text-xs text-neutral-400">Safety on trains & railway platforms</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="font-mono text-2xl font-black text-cyan-400">139</span>
+                  <span className="block text-[10px] text-neutral-500 uppercase">Railways</span>
+                </div>
+              </a>
+
+              {/* 1930 */}
+              <a
+                href="tel:1930"
                 className="bg-neutral-900 border border-neutral-800 hover:border-emerald-500/80 rounded-2xl p-5 flex items-center justify-between gap-4 group transition-all"
               >
                 <div className="flex items-center gap-3.5">
@@ -1287,90 +1680,67 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-white group-hover:text-emerald-400 transition-colors">
-                      Ambulance & Paramedic
+                      1930 (National Cyber Crime)
                     </h3>
-                    <p className="text-xs text-neutral-400">Medical emergency response</p>
+                    <p className="text-xs text-neutral-400">Online blackmail, morphing & fraud</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="font-mono text-xl font-bold text-emerald-400">
-                    {selectedCountry === 'india' ? '108' : selectedCountry === 'uk' ? '999' : '911'}
-                  </span>
-                  <span className="block text-[10px] text-neutral-500 uppercase">Tap to Call</span>
+                  <span className="font-mono text-2xl font-black text-emerald-400">1930</span>
+                  <span className="block text-[10px] text-neutral-500 uppercase">Cyber Police</span>
                 </div>
               </a>
-            </div>
-
-            {/* Personal Fast Dial Contacts */}
-            <div className="flex flex-col gap-3 mt-4">
-              <span className="text-xs font-bold text-neutral-300 uppercase tracking-wider">
-                Personal Emergency Speed Dials:
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {emergencyContacts.map((contact) => (
-                  <div
-                    key={contact.id}
-                    className="bg-neutral-950 border border-neutral-850 rounded-xl p-4 flex items-center justify-between gap-3"
-                  >
-                    <div>
-                      <div className="font-bold text-white text-xs">{contact.name}</div>
-                      <div className="text-[11px] text-neutral-500 font-mono">{contact.phone}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={`tel:${contact.phone}`}
-                        className="p-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white"
-                        title="Call"
-                      >
-                        <Phone className="w-3.5 h-3.5" />
-                      </a>
-                      <button
-                        onClick={() => shareViaSms(contact.phone)}
-                        className="p-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 cursor-pointer"
-                        title="Send SMS"
-                      >
-                        <MessageCircle className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
         )}
 
-        {/* TAB 5: WALK WITH ME (JOURNEY SAFETY TIMER) */}
+        {/* TAB 5: WALK WITH ME */}
         {activeTab === 'walk' && (
           <div className="flex flex-col gap-6 max-w-2xl mx-auto w-full">
             <div className="border-b border-neutral-850 pb-4">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-rose-400 mb-1">
                 <Navigation className="w-4 h-4" />
-                <span>Virtual Safety Escort</span>
+                <span>Virtual Journey Watch (सफ़र सुरक्षा)</span>
               </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-white">"Walk With Me" Journey Watch</h2>
+              <h2 className="text-xl sm:text-2xl font-bold text-white">"Walk With Me" Journey Guard</h2>
               <p className="text-xs sm:text-sm text-neutral-400 mt-0.5">
-                Traveling alone at night, taking a taxi, or walking back to your dorm? Start a safety timer. If you don't check in safely when the timer hits zero, an automatic alarm and circle broadcast will trigger.
+                Taking an auto, late-night cab, or walking from the Metro station? Set an estimated arrival timer. If you don't check in safely before the timer ends, an alarm and WhatsApp circle ping will trigger automatically.
               </p>
             </div>
 
             {!walkActive ? (
-              /* Setup Screen */
               <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 flex flex-col gap-5">
                 <div className="flex flex-col gap-2">
-                  <label className="text-xs font-medium text-neutral-300">Where are you heading?</label>
+                  <label className="text-xs font-medium text-neutral-300">Where are you traveling?</label>
                   <input
                     type="text"
                     value={walkDestination}
                     onChange={(e) => setWalkDestination(e.target.value)}
-                    placeholder="e.g. Walking from Metro to Apartment, Uber ride home"
+                    placeholder="e.g. Metro station to society gate, Ola/Uber ride home"
                     className="bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-rose-500"
                   />
+                  <div className="flex items-center gap-2 flex-wrap mt-1">
+                    {[
+                      'Metro Station to PG / Hostel',
+                      'Late Night Auto / Cab Ride',
+                      'Coaching / College to Home',
+                      'Market to Apartment Gate',
+                    ].map((preset, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setWalkDestination(preset)}
+                        className="text-[10px] px-2.5 py-1 rounded-lg bg-neutral-950 border border-neutral-850 hover:border-neutral-750 text-neutral-400 hover:text-white cursor-pointer"
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <label className="text-xs font-medium text-neutral-300">Estimated Duration</label>
+                  <label className="text-xs font-medium text-neutral-300">Estimated Travel Time</label>
                   <div className="grid grid-cols-4 gap-2">
-                    {[5, 10, 15, 30].map((mins) => (
+                    {[5, 10, 15, 25].map((mins) => (
                       <button
                         key={mins}
                         onClick={() => setWalkDurationMin(mins)}
@@ -1388,26 +1758,24 @@ export default function App() {
 
                 <button
                   onClick={handleStartWalk}
-                  className="w-full py-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-rose-950 cursor-pointer flex items-center justify-center gap-2 transition-colors mt-2"
+                  className="w-full py-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-rose-950 cursor-pointer flex items-center justify-center gap-2 mt-2"
                 >
                   <Navigation className="w-4 h-4" />
                   Start Journey Guard
                 </button>
               </div>
             ) : (
-              /* Active Walk Guard Screen */
               <div className="bg-neutral-900 border border-rose-900/50 rounded-2xl p-6 flex flex-col items-center text-center gap-6">
                 <div className="flex items-center gap-2 text-xs font-bold text-rose-400 uppercase tracking-wider">
                   <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
-                  Active Safety Journey Watch
+                  Active Safety Journey Guard
                 </div>
 
                 <div>
                   <h3 className="text-lg font-bold text-white">{walkDestination}</h3>
-                  <p className="text-xs text-neutral-400 mt-1">Check in when you reach safely to disarm the timer.</p>
+                  <p className="text-xs text-neutral-400 mt-1">Tap safe arrival when you reach your destination.</p>
                 </div>
 
-                {/* Big Timer */}
                 <div className="w-48 h-48 rounded-full border-4 border-rose-600/60 bg-neutral-950 flex flex-col items-center justify-center shadow-xl">
                   <span className="font-mono text-4xl font-extrabold text-white">
                     {Math.floor(walkSecondsLeft / 60)
@@ -1419,14 +1787,13 @@ export default function App() {
                   <span className="text-[11px] text-neutral-500 uppercase tracking-widest mt-1">Remaining</span>
                 </div>
 
-                {/* Action: I have arrived safely */}
                 <div className="flex flex-col gap-2.5 w-full max-w-sm">
                   <button
                     onClick={handleEndWalk}
                     className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-950 cursor-pointer flex items-center justify-center gap-2"
                   >
                     <Check className="w-4 h-4 stroke-[3]" />
-                    I've Arrived Safely · End Guard
+                    I've Arrived Safely (पहुंच गई)
                   </button>
                   <button
                     onClick={() => setWalkSecondsLeft((prev) => prev + 5 * 60)}
@@ -1440,30 +1807,29 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 6: AUDIO DETERRENTS & SIRENS */}
+        {/* TAB 6: AUDIO DETERRENTS */}
         {activeTab === 'audio' && (
           <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full">
             <div className="border-b border-neutral-850 pb-4">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-rose-400 mb-1">
                 <Volume2 className="w-4 h-4" />
-                <span>Audible Defense Tools</span>
+                <span>Audible Defense Tools (ध्वनि सायरन)</span>
               </div>
               <h2 className="text-xl sm:text-2xl font-bold text-white">Emergency Sound Deterrents</h2>
               <p className="text-xs sm:text-sm text-neutral-400 mt-0.5">
-                Play loud synthesized deterrents to startle suspicious persons, alert nearby pedestrians, or simulate authority presence.
+                Play synthesized loud sounds to immediately startle suspects or alert crowds on dark roads.
               </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Emergency Police Siren */}
               <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 flex flex-col justify-between gap-4">
                 <div>
                   <div className="w-10 h-10 rounded-xl bg-red-950 text-red-400 flex items-center justify-center mb-3">
                     <Siren className="w-5 h-5" />
                   </div>
-                  <h3 className="text-base font-bold text-white">Emergency Siren</h3>
+                  <h3 className="text-base font-bold text-white">Emergency Police Siren</h3>
                   <p className="text-xs text-neutral-400 mt-1">
-                    Continuous dual-tone loud distress siren to draw immediate crowd attention.
+                    Continuous loud dual-frequency siren to draw immediate public attention.
                   </p>
                 </div>
 
@@ -1485,15 +1851,14 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Piercing Whistle */}
               <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 flex flex-col justify-between gap-4">
                 <div>
                   <div className="w-10 h-10 rounded-xl bg-amber-950 text-amber-400 flex items-center justify-center mb-3">
                     <Volume2 className="w-5 h-5" />
                   </div>
-                  <h3 className="text-base font-bold text-white">Police Whistle</h3>
+                  <h3 className="text-base font-bold text-white">Police Whistle (सीटी)</h3>
                   <p className="text-xs text-neutral-400 mt-1">
-                    Sharp, high-frequency whistle burst that cuts through city noise.
+                    Sharp, high-frequency whistle burst modeled after traffic & railway police whistles.
                   </p>
                 </div>
 
@@ -1505,15 +1870,14 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Guard Dog Barking */}
               <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 flex flex-col justify-between gap-4">
                 <div>
                   <div className="w-10 h-10 rounded-xl bg-rose-950 text-rose-400 flex items-center justify-center mb-3">
                     <Radio className="w-5 h-5" />
                   </div>
-                  <h3 className="text-base font-bold text-white">Guard Dog Sound</h3>
+                  <h3 className="text-base font-bold text-white">Guard Dog Barking</h3>
                   <p className="text-xs text-neutral-400 mt-1">
-                    Aggressive multi-burst barking to discourage someone following you closely.
+                    Aggressive protective barking pattern to deter suspicious persons on isolated lanes.
                   </p>
                 </div>
 
@@ -1529,27 +1893,27 @@ export default function App() {
         )}
       </main>
 
-      {/* Persistent Bottom Emergency Floating Bar for Mobile */}
-      <aside aria-label="Quick Action Floating Bar" className="sticky bottom-0 z-30 bg-neutral-950/95 border-t border-neutral-850 p-3 sm:hidden backdrop-blur-md">
+      {/* Floating Bottom Bar for Mobile */}
+      <aside aria-label="Mobile Emergency Floating Bar" className="sticky bottom-0 z-30 bg-neutral-950/95 border-t border-neutral-850 p-3 sm:hidden backdrop-blur-md">
         <div className="flex items-center gap-2">
           <button
             onClick={triggerSos}
             className="flex-1 py-3 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg shadow-red-950 cursor-pointer"
           >
             <ShieldAlert className="w-4 h-4" />
-            Instant SOS
+            112 SOS
           </button>
           <button
-            onClick={() => setIsFakeCallOpen(true)}
-            className="flex-1 py-3 bg-indigo-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-950 cursor-pointer"
+            onClick={triggerVolumeDecreaseAction}
+            className="flex-1 py-3 bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg shadow-rose-950 cursor-pointer"
           >
-            <PhoneCall className="w-4 h-4" />
-            Fake Call
+            <Volume1 className="w-4 h-4" />
+            Vol 3x Alert
           </button>
         </div>
       </aside>
 
-      {/* Fake Call Overlay Modal */}
+      {/* Fake Call Overlay */}
       <FakeCallModal
         isOpen={isFakeCallOpen}
         preset={selectedPreset}

@@ -241,15 +241,45 @@ export function speakCallerDialogue(
   utterance.pitch = callerName.toLowerCase().includes('dad') || callerName.toLowerCase().includes('brother') || callerName.toLowerCase().includes('police') ? 0.85 : 1.15;
   utterance.volume = 1.0;
 
-  // Pick voice if available
+  // Pick voice if available (prioritize Indian English/Hindi if on an Indian context)
   const voices = window.speechSynthesis.getVoices();
   if (voices.length > 0) {
-    const isMale = callerName.toLowerCase().includes('dad') || callerName.toLowerCase().includes('brother') || callerName.toLowerCase().includes('police');
-    const matched = voices.find((v) => {
-      const name = v.name.toLowerCase();
-      if (isMale) return name.includes('male') || name.includes('david') || name.includes('george') || name.includes('guy');
-      return name.includes('female') || name.includes('samantha') || name.includes('zira') || name.includes('victoria');
-    });
+    const isMale =
+      callerName.toLowerCase().includes('papa') ||
+      callerName.toLowerCase().includes('dad') ||
+      callerName.toLowerCase().includes('brother') ||
+      callerName.toLowerCase().includes('bhai') ||
+      callerName.toLowerCase().includes('police') ||
+      callerName.toLowerCase().includes('inspector');
+
+    // First look for en-IN or hi-IN voices
+    const indianVoices = voices.filter(
+      (v) =>
+        v.lang === 'en-IN' ||
+        v.lang === 'hi-IN' ||
+        v.name.toLowerCase().includes('india') ||
+        v.name.toLowerCase().includes('neerja') ||
+        v.name.toLowerCase().includes('rishi') ||
+        v.name.toLowerCase().includes('prabhat')
+    );
+
+    let matched: SpeechSynthesisVoice | undefined;
+    if (indianVoices.length > 0) {
+      matched = indianVoices.find((v) => {
+        const name = v.name.toLowerCase();
+        if (isMale) return name.includes('male') || name.includes('rishi') || name.includes('prabhat');
+        return name.includes('female') || name.includes('neerja') || name.includes('heera');
+      }) || indianVoices[0];
+    }
+
+    if (!matched) {
+      matched = voices.find((v) => {
+        const name = v.name.toLowerCase();
+        if (isMale) return name.includes('male') || name.includes('david') || name.includes('george') || name.includes('guy');
+        return name.includes('female') || name.includes('samantha') || name.includes('zira') || name.includes('victoria');
+      });
+    }
+
     if (matched) utterance.voice = matched;
   }
 
