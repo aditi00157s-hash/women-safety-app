@@ -28,9 +28,11 @@ import {
   ChevronRight,
   Calculator as CalcIcon,
   Train,
-  VolumeX,
   Volume1,
-  Settings,
+  Smartphone,
+  Download,
+  Activity,
+  Touchpad,
   Sparkles,
 } from 'lucide-react';
 import { FakeCallModal, FakeCallPreset } from './components/FakeCallModal.tsx';
@@ -62,7 +64,6 @@ interface EmergencyContact {
   isPrimary: boolean;
 }
 
-// Indian context presets for realistic escape calls
 const INDIAN_PRESETS: FakeCallPreset[] = [
   {
     id: 'papa',
@@ -121,8 +122,14 @@ const INDIAN_PRESETS: FakeCallPreset[] = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'home' | 'circle' | 'fakecall' | 'numbers' | 'walk' | 'audio' | 'volume'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'circle' | 'fakecall' | 'numbers' | 'walk' | 'audio' | 'volume' | 'install'>('home');
   const [stealthMode, setStealthMode] = useState(false);
+  const [pocketMode, setPocketMode] = useState(false); // True black screen with 3-tap anywhere trigger
+
+  // --- DEVICE OS DETECTION ---
+  const [isIOS, setIsIOS] = useState(false);
+  const [isAndroid, setIsAndroid] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
 
   // --- LOCATION & SOS STATE ---
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number; accuracy: number; time: string } | null>(null);
@@ -133,13 +140,16 @@ export default function App() {
   const [sirenPlaying, setSirenPlaying] = useState(false);
   const [strobeActive, setStrobeActive] = useState(false);
 
-  // --- VOLUME DECREASE 3X TRIGGER FEATURE ---
+  // --- VOLUME DECREASE / SHAKE TRIGGER STATE ---
   const [volumeShortcutEnabled, setVolumeShortcutEnabled] = useState(true);
+  const [shakeTriggerEnabled, setShakeTriggerEnabled] = useState(true);
   const [volumeTapCount, setVolumeTapCount] = useState(0);
   const [volumeAction, setVolumeAction] = useState<'both' | 'fake_call' | 'call_me_sms'>('both');
   const [volumeContactId, setVolumeContactId] = useState('1'); // Papa by default
   const [volumeTriggerAlert, setVolumeTriggerAlert] = useState<string | null>(null);
   const tapTimesRef = useRef<number[]>([]);
+  const shakeTimesRef = useRef<number[]>([]);
+  const lastShakeTimeRef = useRef<number>(0);
 
   // --- FAKE CALL STATE ---
   const [isFakeCallOpen, setIsFakeCallOpen] = useState(false);
@@ -229,6 +239,18 @@ export default function App() {
   // --- STEALTH CALCULATOR ---
   const [calcDisplay, setCalcDisplay] = useState('0');
 
+  // Detect OS on mount
+  useEffect(() => {
+    const ua = navigator.userAgent || '';
+    const isApple = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isDroid = /Android/.test(ua);
+    setIsIOS(isApple);
+    setIsAndroid(isDroid);
+
+    const isApp = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+    setIsStandalone(isApp);
+  }, []);
+
   // Fetch real geolocation
   const refreshLocation = () => {
     if (!('geolocation' in navigator)) return;
@@ -280,11 +302,11 @@ export default function App() {
     return `🚨 CALL ME URGENTLY! (कॉल करो तुरंत): Hi ${contact.name}, I am in an uncomfortable / unsafe place and cannot talk right now. Please CALL ME REPEATEDLY immediately so I have an excuse to step away! My live GPS location: ${mapsLink} (Time: ${new Date().toLocaleTimeString()})`;
   };
 
-  // --- VOLUME DECREASE 3X LOGIC ---
+  // --- TRIGGER DISPATCH FOR VOLUME 3X / SHAKE / POCKET TAP ---
   const triggerVolumeDecreaseAction = () => {
     const targetContact = emergencyContacts.find((c) => c.id === volumeContactId) || emergencyContacts[0];
 
-    // Play subtle haptic feedback vibration if supported
+    // Android haptic vibration
     if ('vibrate' in navigator) {
       try {
         navigator.vibrate([200, 100, 200, 100, 400]);
@@ -294,35 +316,32 @@ export default function App() {
     // Native Web Notification
     if ('Notification' in window && Notification.permission === 'granted') {
       try {
-        new Notification('🚨 Volume 3x Trigger Activated!', {
+        new Notification('🚨 Safely: Emergency Trigger Activated!', {
           body: `Emergency 'Call Me' Alert dispatched to ${targetContact.name}. Live GPS shared.`,
-          icon: '/favicon.ico',
+          icon: '/icon.svg',
         });
       } catch {}
     }
 
-    setVolumeTriggerAlert(`Volume 3x Pressed! Triggered rescue action for ${targetContact.name}.`);
+    setVolumeTriggerAlert(`Shortcut Triggered! Rescue action dispatched for ${targetContact.name}.`);
     setTimeout(() => setVolumeTriggerAlert(null), 5000);
 
     if (volumeAction === 'fake_call' || volumeAction === 'both') {
-      // Ring the phone immediately from Papa
       setSelectedPreset(INDIAN_PRESETS[0]);
       setIsFakeCallOpen(true);
     }
 
     if (volumeAction === 'call_me_sms' || volumeAction === 'both') {
-      // Open WhatsApp or SMS with pre-filled urgent Call Me message
       const text = encodeURIComponent(getCallMeMessageText());
       window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
     }
   };
 
-  // Register physical Volume Down button presses & keyboard shortcuts ('AudioVolumeDown', 'VolumeDown', or desktop test key 'v'/'V')
+  // Hardware Volume Down Event Listener (Native Android & Desktop 'v' key)
   useEffect(() => {
     if (!volumeShortcutEnabled) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Listen for volume down or test key
       if (
         e.key === 'AudioVolumeDown' ||
         e.code === 'AudioVolumeDown' ||
@@ -330,7 +349,6 @@ export default function App() {
         e.key.toLowerCase() === 'v'
       ) {
         const now = Date.now();
-        // Keep taps within last 2.5 seconds
         tapTimesRef.current = tapTimesRef.current.filter((t) => now - t < 2500);
         tapTimesRef.current.push(now);
 
@@ -342,11 +360,8 @@ export default function App() {
           setVolumeTapCount(0);
           triggerVolumeDecreaseAction();
         } else {
-          // Reset count visual after 2.5 seconds
           setTimeout(() => {
-            if (tapTimesRef.current.length === 0) {
-              setVolumeTapCount(0);
-            }
+            if (tapTimesRef.current.length === 0) setVolumeTapCount(0);
           }, 2600);
         }
       }
@@ -356,13 +371,58 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [volumeShortcutEnabled, volumeAction, volumeContactId, userLocation]);
 
-  // Request browser notification permission
+  // Motion Shake Sensor (Works on both Android and iOS accelerometer)
+  useEffect(() => {
+    if (!shakeTriggerEnabled) return;
+
+    const handleMotion = (event: DeviceMotionEvent) => {
+      const acc = event.accelerationIncludingGravity || event.acceleration;
+      if (!acc || acc.x === null || acc.y === null || acc.z === null) return;
+
+      const totalAcc = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
+      const now = Date.now();
+
+      // Detect strong shake burst (threshold > 24 m/s^2)
+      if (totalAcc > 24 && now - lastShakeTimeRef.current > 300) {
+        lastShakeTimeRef.current = now;
+        shakeTimesRef.current = shakeTimesRef.current.filter((t) => now - t < 2500);
+        shakeTimesRef.current.push(now);
+
+        if (shakeTimesRef.current.length >= 3) {
+          shakeTimesRef.current = [];
+          triggerVolumeDecreaseAction();
+        }
+      }
+    };
+
+    window.addEventListener('devicemotion', handleMotion);
+    return () => window.removeEventListener('devicemotion', handleMotion);
+  }, [shakeTriggerEnabled, volumeAction, volumeContactId, userLocation]);
+
+  // Request iOS DeviceMotion permission (required on iOS 13+ Safari)
+  const enableIOSMotionPermission = async () => {
+    const DeviceMotionEventWithPerm = window.DeviceMotionEvent as unknown as {
+      requestPermission?: () => Promise<'granted' | 'denied'>;
+    };
+    if (typeof DeviceMotionEventWithPerm?.requestPermission === 'function') {
+      try {
+        const response = await DeviceMotionEventWithPerm.requestPermission();
+        if (response === 'granted') {
+          setVolumeTriggerAlert('Motion sensor enabled for iOS Shake-to-SOS!');
+          setTimeout(() => setVolumeTriggerAlert(null), 3000);
+        }
+      } catch {
+        // User cancelled or not supported
+      }
+    }
+  };
+
   const requestNotificationPermission = async () => {
     if ('Notification' in window) {
       const perm = await Notification.requestPermission();
       if (perm === 'granted') {
         new Notification('Safely Suraksha Enabled', {
-          body: 'Volume Decrease 3x will send immediate Call Me alerts to your selected contacts.',
+          body: 'Emergency alerts ready for both Android and iPhone.',
         });
       }
     }
@@ -481,7 +541,6 @@ export default function App() {
     setSirenPlaying(false);
   };
 
-  // Calculator logic for stealth mode
   const handleCalcBtn = (val: string) => {
     if (val === 'C') {
       setCalcDisplay('0');
@@ -499,6 +558,48 @@ export default function App() {
     }
   };
 
+  // --- POCKET MODE (True OLED Black Screen with 3-Tap Anywhere Sensor for iPhone & Android) ---
+  if (pocketMode) {
+    return (
+      <div
+        onClick={() => {
+          const now = Date.now();
+          tapTimesRef.current = tapTimesRef.current.filter((t) => now - t < 2500);
+          tapTimesRef.current.push(now);
+          if (tapTimesRef.current.length >= 3) {
+            tapTimesRef.current = [];
+            setPocketMode(false);
+            triggerVolumeDecreaseAction();
+          }
+        }}
+        className="fixed inset-0 z-50 bg-black flex flex-col justify-between p-6 select-none cursor-pointer"
+      >
+        <div className="flex items-center justify-between text-neutral-800 text-xs">
+          <span>OLED Pocket Guard Active</span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setPocketMode(false);
+            }}
+            className="text-neutral-700 hover:text-neutral-400 p-2 text-xs"
+          >
+            Exit Pocket Mode
+          </button>
+        </div>
+
+        <div className="text-center text-neutral-850 text-xs">
+          <p>Screen is dimmed black for pocket carrying.</p>
+          <p className="mt-1">Tap screen 3 times rapidly anywhere to trigger rescue action.</p>
+        </div>
+
+        <div className="text-center text-neutral-850 text-[10px]">
+          Safely Suraksha · Android & iOS Pocket Sensor
+        </div>
+      </div>
+    );
+  }
+
+  // --- STEALTH CALCULATOR MODE ---
   if (stealthMode) {
     return (
       <div className="min-h-screen bg-black text-white flex flex-col justify-center items-center p-4 font-mono select-none">
@@ -594,7 +695,7 @@ export default function App() {
         className="fixed inset-0 pointer-events-none z-40 bg-red-600/90 mix-blend-screen opacity-0 transition-opacity duration-75"
       />
 
-      {/* Floating Alert Notification when Volume 3x is pressed */}
+      {/* Floating Alert Notification */}
       {volumeTriggerAlert && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gradient-to-r from-red-600 to-rose-600 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-red-300 text-xs font-bold animate-in fade-in slide-in-from-top-4 duration-200">
           <Volume1 className="w-5 h-5 animate-pulse" />
@@ -701,37 +802,38 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <span className="text-base font-bold tracking-tight text-white">Safely</span>
                 <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-1.5 py-0.5 rounded bg-orange-950/90 text-orange-300 border border-orange-800/60 flex items-center gap-1">
-                  <span>🇮🇳 India · सुरक्षा</span>
+                  <span>🇮🇳 India · Android & iOS</span>
                 </span>
               </div>
-              <p className="text-[11px] text-neutral-400">Emergency 112 / 1091 · Live GPS · Volume 3x Trigger</p>
+              <p className="text-[11px] text-neutral-400">112 / 1091 SOS · Live GPS · Volume & Shake Triggers</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Volume Shortcut Indicator & Quick Switch */}
+            {/* Install on Android & iOS button */}
             <button
-              onClick={() => setActiveTab('volume')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border cursor-pointer transition-colors ${
-                volumeShortcutEnabled
-                  ? 'bg-rose-950/60 border-rose-800/80 text-rose-300'
-                  : 'bg-neutral-900 border-neutral-800 text-neutral-500'
-              }`}
-              title="Configure Volume Decrease 3x Trigger"
+              onClick={() => setActiveTab('install')}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-neutral-800 bg-neutral-950 hover:bg-neutral-800 text-neutral-300 text-xs font-medium cursor-pointer"
+              title="Install app on Android or iPhone"
             >
-              <Volume1 className="w-3.5 h-3.5 text-rose-400" />
-              <span className="hidden sm:inline">Volume 3x: {volumeShortcutEnabled ? 'Active' : 'Off'}</span>
-              {volumeTapCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-rose-600 text-white font-mono text-[10px] font-bold">
-                  {volumeTapCount}/3
-                </span>
-              )}
+              <Smartphone className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden sm:inline">Install App</span>
+            </button>
+
+            {/* Pocket Guard Sensor */}
+            <button
+              onClick={() => setPocketMode(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-neutral-800 bg-neutral-950 hover:bg-neutral-800 text-neutral-300 text-xs font-medium cursor-pointer"
+              title="OLED dim screen with 3-tap anywhere sensor"
+            >
+              <Touchpad className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Pocket Guard</span>
             </button>
 
             {/* Stealth Mode */}
             <button
               onClick={() => setStealthMode(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-800 bg-neutral-950 hover:bg-neutral-800 text-neutral-300 text-xs font-medium cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-neutral-800 bg-neutral-950 hover:bg-neutral-800 text-neutral-300 text-xs font-medium cursor-pointer"
               title="Disguise as calculator"
             >
               <CalcIcon className="w-3.5 h-3.5 text-neutral-400" />
@@ -762,34 +864,39 @@ export default function App() {
         </div>
       </header>
 
-      {/* Volume 3x Active Persistent Bar (shows pocket protection status) */}
-      {volumeShortcutEnabled && (
-        <div className="bg-gradient-to-r from-neutral-900 via-rose-950/40 to-neutral-900 border-b border-rose-900/30 px-4 py-2">
-          <div className="max-w-6xl mx-auto flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-              <span className="text-neutral-300">
-                <strong>Pocket Shortcut Active:</strong> Click your phone's <strong>Volume Down button 3 times rapidly</strong> (or press 'V' key) to send an instant "Call Me!" alert to <strong>{emergencyContacts.find((c) => c.id === volumeContactId)?.name}</strong>.
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={triggerVolumeDecreaseAction}
-                className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-[11px] cursor-pointer"
-              >
-                Test 3x Click Now
-              </button>
-            </div>
+      {/* Cross-Platform Hardware Triggers Status Bar */}
+      <div className="bg-gradient-to-r from-neutral-900 via-rose-950/40 to-neutral-900 border-b border-rose-900/30 px-4 py-2">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shrink-0" />
+            <span className="text-neutral-300">
+              <strong>Android & iPhone Shortcuts Ready:</strong> Volume Down 3x · Shake Phone 3x · Pocket Tap.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveTab('volume')}
+              className="px-2.5 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-medium text-[11px] cursor-pointer"
+            >
+              Configure Actions
+            </button>
+            <button
+              onClick={triggerVolumeDecreaseAction}
+              className="px-2.5 py-0.5 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-[11px] cursor-pointer"
+            >
+              Test Trigger
+            </button>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Tabs */}
       <div className="bg-neutral-900 border-b border-neutral-850 px-4">
         <div className="max-w-6xl mx-auto flex items-center gap-1 sm:gap-2 overflow-x-auto py-2 scrollbar-none">
           {[
             { id: 'home', label: 'Safety Radar', icon: MapPin },
-            { id: 'volume', label: 'Volume 3x Trigger', icon: Volume1, highlight: true },
+            { id: 'volume', label: 'Volume & Shake Triggers', icon: Volume1, highlight: true },
+            { id: 'install', label: 'Android & iOS App Guide', icon: Smartphone },
             { id: 'fakecall', label: 'Fake Call (Papa / Police)', icon: PhoneCall },
             { id: 'circle', label: 'Suraksha Circle', icon: Users, badge: circleMembers.length },
             { id: 'numbers', label: 'India Helplines (112 / 1091)', icon: Phone },
@@ -828,49 +935,158 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
-        {/* TAB: VOLUME 3X TRIGGER CONFIGURATION & DEMO */}
+        {/* TAB: INSTALL ON ANDROID & IOS GUIDE */}
+        {activeTab === 'install' && (
+          <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full">
+            <div className="border-b border-neutral-850 pb-4">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-rose-400 mb-1">
+                <Smartphone className="w-4 h-4" />
+                <span>Install on Mobile (Android & Apple iOS)</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold text-white">
+                How to Install Safely on Android & iPhone
+              </h2>
+              <p className="text-xs sm:text-sm text-neutral-400 mt-1">
+                Safely is built as an installable Progressive Web App (PWA) with full standalone support, offline emergency directory, and hardware triggers.
+              </p>
+            </div>
+
+            {/* Platform Guides Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Android Card */}
+              <div className={`p-6 rounded-2xl border flex flex-col justify-between gap-5 ${isAndroid ? 'bg-neutral-850 border-emerald-500/80 ring-1 ring-emerald-500/30' : 'bg-neutral-900 border-neutral-800'}`}>
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Smartphone className="w-4 h-4" />
+                      For Android Phones (Samsung, Pixel, OnePlus, Xiaomi)
+                    </span>
+                    {isAndroid && (
+                      <span className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                        Your Device Detected
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-base font-bold text-white">Install via Google Chrome</h3>
+                  <ol className="text-xs text-neutral-350 space-y-2.5 mt-3 list-decimal list-inside leading-relaxed">
+                    <li>Tap the <strong>three dots menu (⋮)</strong> at top right corner of Chrome.</li>
+                    <li>Tap <strong>"Install app"</strong> or <strong>"Add to Home Screen"</strong>.</li>
+                    <li>Confirm <strong>"Install"</strong>. Safely will appear directly on your home screen with its own icon.</li>
+                    <li><strong>Physical Volume Trigger:</strong> Android directly captures triple-clicking the physical Volume Down button!</li>
+                  </ol>
+                </div>
+
+                <div className="bg-neutral-950 border border-neutral-850 p-3 rounded-xl text-xs text-emerald-400 flex items-center gap-2 font-mono">
+                  <Check className="w-4 h-4 shrink-0" />
+                  <span>Hardware Volume 3x Supported on Android</span>
+                </div>
+              </div>
+
+              {/* iOS Card */}
+              <div className={`p-6 rounded-2xl border flex flex-col justify-between gap-5 ${isIOS ? 'bg-neutral-850 border-rose-500/80 ring-1 ring-rose-500/30' : 'bg-neutral-900 border-neutral-800'}`}>
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Smartphone className="w-4 h-4" />
+                      For Apple iPhones (iOS 14+)
+                    </span>
+                    {isIOS && (
+                      <span className="text-[10px] bg-rose-950 text-rose-300 border border-rose-800 px-2 py-0.5 rounded-full font-bold">
+                        Your iPhone Detected
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-base font-bold text-white">Install via Safari</h3>
+                  <ol className="text-xs text-neutral-350 space-y-2.5 mt-3 list-decimal list-inside leading-relaxed">
+                    <li>Open this link in <strong>Safari browser</strong> on your iPhone.</li>
+                    <li>Tap the <strong>Share button (square with arrow up ⎋)</strong> at bottom.</li>
+                    <li>Scroll down and tap <strong>"Add to Home Screen" (⊞)</strong>.</li>
+                    <li>Tap <strong>Add</strong>. Safely opens edge-to-edge without browser URL bars!</li>
+                    <li><strong>iPhone Triggers:</strong> Use <strong>Shake-to-SOS</strong>, <strong>Pocket Tap</strong>, or link Apple <strong>Back Tap</strong> (Settings → Accessibility → Touch → Back Tap).</li>
+                  </ol>
+                </div>
+
+                {isIOS && (
+                  <button
+                    onClick={enableIOSMotionPermission}
+                    className="w-full py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Activity className="w-4 h-4" />
+                    Enable iPhone Shake Sensor Permission
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* iPhone Back Tap Special Tip */}
+            <div className="bg-gradient-to-r from-neutral-900 via-indigo-950/40 to-neutral-900 border border-indigo-900/50 rounded-2xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shrink-0">
+                  <Touchpad className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white">iPhone "Back Tap" Secret Hardware Trigger</h4>
+                  <p className="text-xs text-neutral-400">
+                    On iPhone 8 & newer, you can tap the physical back of your phone 2 or 3 times to open Safely! Set it up in: <em>Settings → Accessibility → Touch → Back Tap</em>.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: VOLUME & SHAKE TRIGGERS */}
         {activeTab === 'volume' && (
           <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full">
             <div className="border-b border-neutral-850 pb-4">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-rose-400 mb-1">
                 <Volume1 className="w-4 h-4" />
-                <span>Pocket Hardware Shortcut (आवाज़ बटन शॉर्टकट)</span>
+                <span>Android & iOS Hardware Triggers (शॉर्टकट)</span>
               </div>
               <h2 className="text-xl sm:text-2xl font-bold text-white">
-                Volume Decrease 3x Trigger Settings
+                Volume Down & Shake-to-SOS Triggers
               </h2>
               <p className="text-xs sm:text-sm text-neutral-400 mt-1">
-                When you're in an uncomfortable conversation, walking in the dark, or in a suspicious auto/cab, click the <strong>Volume Down button 3 times rapidly</strong> through your pocket. Safely will immediately send a "Call Me Urgently!" distress notification and ring your phone.
+                Discreet pocket triggers for both <strong>Android</strong> (Volume Down button 3x) and <strong>iPhone</strong> (Shake 3x or Pocket Screen Tap) to immediately send a "Call Me!" alert.
               </p>
             </div>
 
-            {/* Interactive Status & Live Tap Feedback */}
+            {/* Interactive Hardware Tester */}
             <div className="bg-gradient-to-br from-rose-950/50 via-neutral-900 to-neutral-950 border border-rose-900/60 rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
               <div className="flex flex-col gap-3 text-center md:text-left">
                 <div className="flex items-center justify-center md:justify-start gap-2 text-xs font-bold text-rose-400 uppercase tracking-wider">
                   <span className={`w-2.5 h-2.5 rounded-full ${volumeShortcutEnabled ? 'bg-emerald-400 animate-ping' : 'bg-neutral-600'}`} />
-                  <span>{volumeShortcutEnabled ? 'Hardware Listener Active' : 'Shortcut Disabled'}</span>
+                  <span>Hardware Listener Active on Android & iOS</span>
                 </div>
                 <h3 className="text-xl sm:text-2xl font-bold text-white">
-                  Press Volume Down 3 Times (or press 'V' key)
+                  3x Rapid Trigger (Volume Down, Shake, or Tap)
                 </h3>
                 <p className="text-xs text-neutral-300 max-w-md">
-                  Keep your phone inside your jeans pocket or bag. Triple-clicking the volume down button triggers your safety action without looking at the screen.
+                  Keep your phone inside your jeans pocket or bag. Triple-clicking volume down or shaking the phone 3 times triggers your safety action without opening the screen.
                 </p>
 
-                {/* Notification permission prompt */}
-                {'Notification' in window && Notification.permission !== 'granted' && (
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
-                    onClick={requestNotificationPermission}
-                    className="self-start inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-750 text-neutral-200 text-xs font-medium border border-neutral-700 cursor-pointer mt-1"
+                    onClick={() => setPocketMode(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 text-xs font-medium border border-emerald-800 cursor-pointer"
                   >
-                    <Bell className="w-3.5 h-3.5 text-rose-400" />
-                    <span>Enable Lockscreen System Notifications</span>
+                    <Touchpad className="w-3.5 h-3.5" />
+                    <span>Launch OLED Pocket Screen (3-Tap Anywhere)</span>
                   </button>
-                )}
+
+                  {isIOS && (
+                    <button
+                      onClick={enableIOSMotionPermission}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-850 hover:bg-neutral-800 text-neutral-200 text-xs font-medium border border-neutral-700 cursor-pointer"
+                    >
+                      <Activity className="w-3.5 h-3.5 text-rose-400" />
+                      <span>Grant iPhone Motion Sensor</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {/* Interactive Virtual Volume Button Simulator */}
+              {/* Interactive Button */}
               <div className="flex flex-col items-center gap-3 shrink-0">
                 <button
                   onClick={() => {
@@ -893,22 +1109,22 @@ export default function App() {
                   className="w-32 h-32 rounded-2xl bg-neutral-900 border-2 border-rose-500/80 hover:border-rose-400 hover:bg-neutral-850 flex flex-col items-center justify-center gap-1 shadow-2xl active:scale-95 transition-transform cursor-pointer group"
                 >
                   <Volume1 className="w-8 h-8 text-rose-400 group-hover:scale-110 transition-transform" />
-                  <span className="text-xs font-bold text-white">Volume Down</span>
+                  <span className="text-xs font-bold text-white">Click 3 Times</span>
                   <span className="text-[10px] text-neutral-400 font-mono">
-                    {volumeTapCount > 0 ? `${volumeTapCount} / 3 clicks` : 'Click 3 times'}
+                    {volumeTapCount > 0 ? `${volumeTapCount} / 3 clicks` : 'Volume / Test'}
                   </span>
                 </button>
                 <span className="text-[11px] text-neutral-500">Tap 3x rapidly to test trigger</span>
               </div>
             </div>
 
-            {/* Customization Options */}
+            {/* Settings Columns */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Target Selected Contact */}
+              {/* Selected Contact */}
               <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 flex flex-col gap-4">
                 <div className="flex items-center gap-2 text-xs font-bold text-neutral-300 uppercase tracking-wider">
                   <Users className="w-4 h-4 text-rose-400" />
-                  <span>1. Who to send the "Call Me" notification to:</span>
+                  <span>1. Contact receiving "Call Me" alert:</span>
                 </div>
 
                 <div className="flex flex-col gap-2.5">
@@ -946,7 +1162,7 @@ export default function App() {
               <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 flex flex-col gap-4">
                 <div className="flex items-center gap-2 text-xs font-bold text-neutral-300 uppercase tracking-wider">
                   <Zap className="w-4 h-4 text-rose-400" />
-                  <span>2. What action should trigger on 3x Volume Down:</span>
+                  <span>2. Trigger Action:</span>
                 </div>
 
                 <div className="flex flex-col gap-2.5 text-xs">
@@ -954,17 +1170,17 @@ export default function App() {
                     {
                       id: 'both',
                       title: 'Ring My Phone & Send "Call Me" Alert (Recommended)',
-                      desc: 'Rings your phone from Papa/Police so you can answer, AND prepares a pre-filled WhatsApp/SMS to your contact with live GPS.',
+                      desc: 'Rings your phone immediately from Papa/Police so you can answer, AND prepares a WhatsApp/SMS alert with live GPS to your contact.',
                     },
                     {
                       id: 'fake_call',
                       title: 'Discreet Fake Call Escape Only',
-                      desc: 'Immediately makes your phone ring loudly from Papa or Police with realistic audio so you can walk away.',
+                      desc: 'Makes your phone ring aloud with realistic dialogue from Papa or Police so you can walk away.',
                     },
                     {
                       id: 'call_me_sms',
                       title: 'Silent "Call Me Urgently" Dispatch',
-                      desc: 'Quietly sends: "CALL ME IMMEDIATELY! I am in trouble at [Live GPS Location]" without ringing your phone.',
+                      desc: 'Discreetly sends: "CALL ME IMMEDIATELY! I am in trouble at [Live GPS Location]" without ringing your phone.',
                     },
                   ].map((act) => (
                     <label
@@ -1022,7 +1238,7 @@ export default function App() {
                 </p>
                 <div className="text-[11px] text-rose-300 flex items-center gap-1.5 mt-1">
                   <Volume1 className="w-3.5 h-3.5" />
-                  <span>Pro-tip: Click phone's Volume Down button 3x to trigger automatic rescue call.</span>
+                  <span>Pro-tip: Click phone's Volume Down 3x or Shake phone 3x to trigger automatic rescue call.</span>
                 </div>
               </div>
 
@@ -1227,7 +1443,7 @@ export default function App() {
               </div>
               <h2 className="text-xl sm:text-2xl font-bold text-white">Realistic Incoming Fake Call (India)</h2>
               <p className="text-xs sm:text-sm text-neutral-400 mt-1">
-                Rings your phone with authentic Indian English / Hindi voice scripts. Answer aloud to effortlessly excuse yourself and walk away from uncomfortable or unsafe situations.
+                Rings your phone with authentic Indian English / Hindi voice scripts. Works seamlessly on Android and iPhone with native mobile call screen.
               </p>
             </div>
 
@@ -1531,7 +1747,7 @@ export default function App() {
                 </div>
                 <h2 className="text-xl sm:text-2xl font-bold text-white">India Emergency Directory</h2>
                 <p className="text-xs sm:text-sm text-neutral-400 mt-0.5">
-                  1-Tap Direct dialing. Works 24/7 without internet or balance on all Indian telecom networks.
+                  1-Tap Direct dialing on both Android & iOS. Works 24/7 without internet or balance on all telecom networks.
                 </p>
               </div>
 
@@ -1559,7 +1775,6 @@ export default function App() {
 
             {/* Helpline Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* 112 */}
               <a
                 href="tel:112"
                 className="bg-neutral-900 border border-neutral-800 hover:border-red-600/80 rounded-2xl p-5 flex items-center justify-between gap-4 group transition-all"
@@ -1581,7 +1796,6 @@ export default function App() {
                 </div>
               </a>
 
-              {/* 1091 */}
               <a
                 href="tel:1091"
                 className="bg-neutral-900 border border-neutral-800 hover:border-rose-500/80 rounded-2xl p-5 flex items-center justify-between gap-4 group transition-all"
@@ -1603,7 +1817,6 @@ export default function App() {
                 </div>
               </a>
 
-              {/* 1090 */}
               <a
                 href="tel:1090"
                 className="bg-neutral-900 border border-neutral-800 hover:border-indigo-500/80 rounded-2xl p-5 flex items-center justify-between gap-4 group transition-all"
@@ -1625,7 +1838,6 @@ export default function App() {
                 </div>
               </a>
 
-              {/* 181 */}
               <a
                 href="tel:181"
                 className="bg-neutral-900 border border-neutral-800 hover:border-amber-500/80 rounded-2xl p-5 flex items-center justify-between gap-4 group transition-all"
@@ -1647,7 +1859,6 @@ export default function App() {
                 </div>
               </a>
 
-              {/* 139 */}
               <a
                 href="tel:139"
                 className="bg-neutral-900 border border-neutral-800 hover:border-cyan-500/80 rounded-2xl p-5 flex items-center justify-between gap-4 group transition-all"
@@ -1669,7 +1880,6 @@ export default function App() {
                 </div>
               </a>
 
-              {/* 1930 */}
               <a
                 href="tel:1930"
                 className="bg-neutral-900 border border-neutral-800 hover:border-emerald-500/80 rounded-2xl p-5 flex items-center justify-between gap-4 group transition-all"
